@@ -1,0 +1,54 @@
+/* RiftCoach.GG - Hextech & Esports Dark UI */
+body {
+  background-color: #090d16;
+  background-image: 
+    radial-gradient(circle at 15% 10%, rgba(10, 200, 185, 0.07) 0%, transparent 35%),
+    radial-gradient(circle at 85% 15%, rgba(200, 170, 110, 0.07) 0%, transparent 35%);
+  color: #e2e8f0;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c8aa6e;
+}
+
+.hextech-border {
+  border: 1px solid rgba(200, 170, 110, 0.25);
+}
+
+.cyan-glow {
+  box-shadow: 0 0 20px -5px rgba(10, 200, 185, 0.25);
+}
+
+.gold-glow {
+  box-shadow: 0 0 20px -5px rgba(200, 170, 110, 0.25);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RiftCoach.GG — Análise de Matchups & AI Laning Coach</title>
+  <title>RiftCoach.GG — Análise de Confrontos & Coaching de Rota</title>
 
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Google Fonts: Inter & Rajdhani (Esports / Hextech UI) -->
+  <!-- Google Fonts: Inter & Rajdhani -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
@@ -50,9 +50,9 @@
 </head>
 <body class="min-h-screen flex flex-col font-sans antialiased selection:bg-hextech-cyan selection:text-slate-950">
 
-  <!-- ================= HEADER / NAVBAR ================= -->
-  <header class="border-b border-slate-800/80 bg-[#090d16]/90 backdrop-blur-md sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+  <!-- ================= HEADER & BARRA DE FILTROS COMPETITIVOS ================= -->
+  <header class="border-b border-slate-800/80 bg-[#090d16]/95 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
       <!-- Brand -->
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-hextech-gold to-amber-700 p-[1px] shadow-lg">
@@ -63,36 +63,53 @@
         <div>
           <div class="flex items-center gap-2">
             <span class="font-display font-bold text-xl tracking-wider text-white">RIFT<span class="text-hextech-cyan">COACH</span>.GG</span>
-            <span class="text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded bg-hextech-cyan/15 text-hextech-cyan border border-hextech-cyan/30">AI Matchup Engine</span>
+            <span class="text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded bg-hextech-cyan/15 text-hextech-cyan border border-hextech-cyan/30">Matchup Analytics</span>
           </div>
-          <p class="text-[11px] text-slate-400 hidden sm:block">Telemetria de Fase de Rotas & Coaching Tático por IA</p>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Análise de Fase de Rotas, Builds & Coaching Tático</p>
         </div>
       </div>
 
-      <!-- Filtros Globais: Rota, Elo & Patch -->
+      <!-- Filtros Globais: Rota da Análise, Elo & Patch -->
       <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-        <!-- Seletor de Rota -->
-        <div class="flex items-center bg-slate-900/90 border border-slate-800 rounded-lg p-1" id="roleFilterGroup">
-          <button data-role="TOP" class="role-btn px-2.5 py-1 rounded text-xs font-medium transition-all bg-hextech-gold/20 text-hextech-gold border border-hextech-gold/40">Top</button>
-          <button data-role="JUNGLE" class="role-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all">Jungle</button>
-          <button data-role="MID" class="role-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all">Mid</button>
-          <button data-role="ADC" class="role-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all">ADC</button>
-          <button data-role="SUPPORT" class="role-btn px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition-all">Sup</button>
+        <!-- Seletor de Rota da Análise -->
+        <div class="flex items-center bg-slate-900/90 border border-slate-800 rounded-lg p-1" id="roleFilterGroup" role="group" aria-label="Rota da Análise">
+          <button data-role="TOP" class="role-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-semibold transition-all bg-hextech-gold/20 text-hextech-gold border border-hextech-gold/40">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h13l-3 3H7v7l-3 3V4zm16 16H7l3-3h7v-7l3-3v13zm-9.5-9.5h3v3h-3v-3z"/></svg>
+            <span>Top</span>
+          </button>
+          <button data-role="JUNGLE" class="role-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c1.5 3.5 4.5 6 4.5 10a4.5 4.5 0 01-9 0C7.5 9 10.5 6.5 12 3zm-6 7c1 2.2 2.5 4 2.5 6.5A2.5 2.5 0 016 19a2.5 2.5 0 01-2.5-2.5C3.5 14 5 12.2 6 10zm12 0c1 2.2 2.5 4 2.5 6.5A2.5 2.5 0 0118 19a2.5 2.5 0 01-2.5-2.5c0-2.5 1.5-4.3 2.5-6.5z"/></svg>
+            <span>Jungle</span>
+          </button>
+          <button data-role="MID" class="role-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h6L4 10V4zm16 16h-6l6-6v6zM17.5 4H20v2.5L6.5 20H4v-2.5L17.5 4z"/></svg>
+            <span>Mid</span>
+          </button>
+          <button data-role="ADC" class="role-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M20 20H7l3-3h7v-7l3-3v13zM4 4h13l-3 3H7v7l-3 3V4zm6.5 6.5h3v3h-3v-3z"/></svg>
+            <span>ADC</span>
+          </button>
+          <button data-role="SUPPORT" class="role-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l8 3.5v5.5c0 5-3.4 9.6-8 11-4.6-1.4-8-6-8-11V6.5L12 3zm-1 5v3H8v2h3v3h2v-3h3v-2h-3V8h-2z"/></svg>
+            <span>Suporte</span>
+          </button>
         </div>
 
-        <!-- Seletor de Elo -->
+        <!-- Seletor de Elo Completo -->
         <div class="relative">
-          <select id="eloSelect" class="bg-slate-900 border border-slate-800 text-xs font-medium text-slate-200 rounded-lg px-3 py-2 pr-7 focus:outline-none focus:border-hextech-gold cursor-pointer">
-            <option value="EMERALD_PLUS" selected>Esmeralda+</option>
-            <option value="GLOBAL">Global (Todos)</option>
-            <option value="CHALLENGER">Desafiante</option>
-            <option value="GRANDMASTER">Grão-Mestre</option>
-            <option value="MASTER">Mestre+</option>
-            <option value="DIAMOND">Diamante+</option>
-            <option value="PLATINUM">Platina</option>
-            <option value="GOLD">Ouro</option>
+          <select id="eloSelect" aria-label="Filtro de Elo" class="bg-slate-900 border border-slate-800 text-xs font-medium text-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-hextech-gold cursor-pointer">
+            <option value="GLOBAL">Global</option>
+            <option value="IRON">Ferro</option>
+            <option value="BRONZE">Bronze</option>
             <option value="SILVER">Prata</option>
-            <option value="BRONZE_IRON">Ferro / Bronze</option>
+            <option value="GOLD">Ouro</option>
+            <option value="PLATINUM">Platina</option>
+            <option value="EMERALD">Esmeralda</option>
+            <option value="EMERALD_PLUS" selected>Esmeralda+</option>
+            <option value="DIAMOND">Diamante</option>
+            <option value="MASTER">Mestre</option>
+            <option value="GRANDMASTER">Grão-Mestre</option>
+            <option value="CHALLENGER">Desafiante</option>
           </select>
         </div>
 
@@ -109,34 +126,37 @@
   <!-- ================= MAIN CONTENT ================= -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <!-- 1. SELETOR DE MATCHUP (1v1 + TOGGLE JUNGLER INIMIGO 2v2) -->
+    <!-- 1. SELETOR DE CAMPEÕES (ALIADO vs INIMIGO + TOGGLE JUNGLER INIMIGO) -->
     <section class="bg-hextech-card border border-slate-800 rounded-xl p-4 sm:p-6 shadow-xl relative overflow-hidden">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
 
         <!-- Campeão Aliado (Você) -->
         <div class="lg:col-span-4 relative">
           <label class="block text-[11px] font-semibold uppercase tracking-wider text-hextech-cyan mb-1.5 flex items-center gap-1.5">
-            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Seu Campeão (Aliado)
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Campeão Aliado (Você)
           </label>
           <button id="btnSelectAlly" type="button" class="w-full flex items-center justify-between bg-slate-900/90 hover:bg-slate-900 border border-hextech-cyan/40 rounded-xl p-3 transition-all group cyan-glow">
             <div class="flex items-center gap-3">
-              <img id="allyImg" src="" alt="Aliado" class="w-12 h-12 rounded-lg border border-hextech-cyan object-cover bg-slate-800" />
+              <div id="allyAvatarWrap" class="w-12 h-12 rounded-lg border border-dashed border-hextech-cyan/60 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+                <i id="allyPlaceholderIcon" data-lucide="user-plus" class="w-5 h-5 text-hextech-cyan/70"></i>
+                <img id="allyImg" src="" alt="" class="hidden w-full h-full object-cover" />
+              </div>
               <div class="text-left">
-                <div id="allyName" class="font-display font-bold text-lg text-white group-hover:text-hextech-cyan transition-colors">Carregando...</div>
-                <div id="allyTitle" class="text-xs text-slate-400 capitalize">Selecione um campeão</div>
+                <div id="allyName" class="font-display font-bold text-lg text-white group-hover:text-hextech-cyan transition-colors">Selecionar Campeão</div>
+                <div id="allyTitle" class="text-xs text-slate-400">Clique para escolher seu campeão</div>
               </div>
             </div>
-            <div class="flex items-center gap-1 text-xs text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-md">
-              <span>Trocar</span>
+            <div class="flex items-center gap-1 text-xs text-slate-300 bg-slate-800/90 px-2.5 py-1.5 rounded-md border border-slate-700">
+              <span>Escolher</span>
               <i data-lucide="chevron-down" class="w-4 h-4"></i>
             </div>
           </button>
         </div>
 
-        <!-- Centro: VS + Toggle Jungler Inimigo + Inverter -->
-        <div class="lg:col-span-4 flex flex-col items-center justify-center py-2 space-y-3">
+        <!-- Centro: VS + Inverter + Toggle Jungler Inimigo -->
+        <div class="lg:col-span-4 flex flex-col items-center justify-center py-1 space-y-3">
           <div class="flex items-center gap-3">
-            <button id="btnSwapChamps" title="Inverter Matchup" class="p-2 rounded-lg bg-slate-900 border border-slate-700 hover:border-hextech-gold text-slate-300 hover:text-hextech-gold transition-all">
+            <button id="btnSwapChamps" type="button" title="Inverter Confronto" class="p-2.5 rounded-lg bg-slate-900 border border-slate-700 hover:border-hextech-gold text-slate-300 hover:text-hextech-gold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
               <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
             </button>
             <div class="w-11 h-11 rounded-full bg-gradient-to-b from-hextech-gold/20 to-slate-900 border border-hextech-gold/50 flex items-center justify-center font-display font-bold text-lg text-hextech-gold shadow-inner">
@@ -149,39 +169,45 @@
             </button>
           </div>
 
-          <!-- Seletor Compacto do Jungler Inimigo (Oculto por padrão) -->
+          <!-- 3º Seletor Compacto: Jungler Inimigo (Oculto por padrão) -->
           <div id="enemyJunglerContainer" class="hidden w-full max-w-xs animate-fadeIn">
-            <div class="bg-amber-950/20 border border-amber-500/40 rounded-lg p-2 flex items-center justify-between">
+            <div class="bg-amber-950/20 border border-amber-500/40 rounded-lg p-2 flex items-center justify-between gap-2">
               <div class="flex items-center gap-2.5">
-                <img id="junglerImg" src="" alt="Jungler" class="w-8 h-8 rounded-md border border-amber-500/60 object-cover" />
+                <div class="w-9 h-9 rounded-md border border-amber-500/60 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+                  <i id="junglerPlaceholderIcon" data-lucide="trees" class="w-4 h-4 text-amber-400/80"></i>
+                  <img id="junglerImg" src="" alt="" class="hidden w-full h-full object-cover" />
+                </div>
                 <div>
-                  <div class="text-[10px] uppercase tracking-wider text-amber-400 font-semibold">Ameaça 2v2 / Gank</div>
-                  <div id="junglerName" class="text-xs font-bold text-white">Lee Sin</div>
+                  <div class="text-[10px] uppercase tracking-wider text-amber-400 font-semibold">Jungler Adversário (2v2)</div>
+                  <div id="junglerName" class="text-xs font-bold text-white">Selecionar Jungler</div>
                 </div>
               </div>
-              <button id="btnSelectJungler" class="text-[11px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-2 py-1 rounded border border-amber-500/30 transition">
-                Alterar JG
+              <button id="btnSelectJungler" type="button" class="text-[11px] font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2.5 py-1 rounded border border-amber-500/40 transition">
+                Escolher JG
               </button>
             </div>
           </div>
         </div>
 
-        <!-- Campeão Oponente (Inimigo) -->
+        <!-- Campeão Inimigo (Oponente) -->
         <div class="lg:col-span-4 relative">
           <label class="block text-[11px] font-semibold uppercase tracking-wider text-rose-400 mb-1.5 flex items-center justify-end gap-1.5">
-            <span>Oponente de Rota (Inimigo)</span> <i data-lucide="flame" class="w-3.5 h-3.5"></i>
+            <span>Campeão Inimigo (Oponente)</span> <i data-lucide="flame" class="w-3.5 h-3.5"></i>
           </label>
           <button id="btnSelectEnemy" type="button" class="w-full flex items-center justify-between bg-slate-900/90 hover:bg-slate-900 border border-rose-500/40 rounded-xl p-3 transition-all group">
-            <div class="flex items-center gap-1 text-xs text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-md">
+            <div class="flex items-center gap-1 text-xs text-slate-300 bg-slate-800/90 px-2.5 py-1.5 rounded-md border border-slate-700">
               <i data-lucide="chevron-down" class="w-4 h-4"></i>
-              <span>Trocar</span>
+              <span>Escolher</span>
             </div>
             <div class="flex items-center gap-3 text-right">
               <div>
-                <div id="enemyName" class="font-display font-bold text-lg text-white group-hover:text-rose-400 transition-colors">Carregando...</div>
-                <div id="enemyTitle" class="text-xs text-slate-400 capitalize">Selecione um oponente</div>
+                <div id="enemyName" class="font-display font-bold text-lg text-white group-hover:text-rose-400 transition-colors">Selecionar Oponente</div>
+                <div id="enemyTitle" class="text-xs text-slate-400">Clique para escolher o inimigo</div>
               </div>
-              <img id="enemyImg" src="" alt="Inimigo" class="w-12 h-12 rounded-lg border border-rose-500 object-cover bg-slate-800" />
+              <div id="enemyAvatarWrap" class="w-12 h-12 rounded-lg border border-dashed border-rose-500/60 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+                <i id="enemyPlaceholderIcon" data-lucide="user-plus" class="w-5 h-5 text-rose-400/70"></i>
+                <img id="enemyImg" src="" alt="" class="hidden w-full h-full object-cover" />
+              </div>
             </div>
           </button>
         </div>
@@ -189,173 +215,261 @@
       </div>
     </section>
 
-    <!-- 2. BARRA DE WIN RATE COMPARATIVA + RESUMO DO MATCHUP -->
-    <section class="bg-hextech-card border border-slate-800 rounded-xl p-5 shadow-lg">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-        <div class="flex items-center gap-2">
-          <span id="allyWinRateLabel" class="font-display font-bold text-2xl text-hextech-cyan">51.8%</span>
-          <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Win Rate no Matchup</span>
-          <span id="matchupDifficultyBadge" class="ml-2 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-            Matchup Favorável
-          </span>
+    <!-- ================= A. TELA DE ESTADO INICIAL VAZIO (PRIMEIRA VISITA) ================= -->
+    <section id="emptyStateView" class="bg-hextech-card/80 border border-slate-800/90 rounded-2xl p-8 sm:p-14 text-center shadow-xl">
+      <div class="max-w-lg mx-auto flex flex-col items-center">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-hextech-gold/20 to-hextech-cyan/10 border border-hextech-gold/40 flex items-center justify-center mb-5 shadow-inner">
+          <i data-lucide="swords" class="w-8 h-8 text-hextech-gold"></i>
         </div>
+        <h1 class="font-display font-bold text-2xl sm:text-3xl text-white tracking-wide mb-2">
+          Selecione os campeões e a rota para analisar o confronto
+        </h1>
+        <p class="text-sm text-slate-400 mb-8">
+          Escolha o seu campeão aliado e o oponente de rota acima para desbloquear as estatísticas de Win Rate, domínio aos 15 minutos, builds anti-matchup e plano de jogo da IA.
+        </p>
 
-        <div class="flex items-center gap-4 text-xs text-slate-400">
-          <span class="flex items-center gap-1">
-            <i data-lucide="database" class="w-3.5 h-3.5 text-hextech-gold"></i>
-            <strong id="sampleSizeText" class="text-slate-200">14.820</strong> partidas analisadas
+        <!-- Sugestões Rápidas de Confrontos para Teste Imediato -->
+        <div class="w-full pt-6 border-t border-slate-800/80">
+          <span class="block text-[11px] font-semibold uppercase tracking-widest text-slate-400 mb-3">
+            Confrontos em Destaque no Patch
           </span>
-          <span id="enemyWinRateLabel" class="font-display font-bold text-2xl text-rose-400">48.2%</span>
+          <div class="flex flex-wrap items-center justify-center gap-2.5">
+            <button type="button" data-quick-matchup="MID:Yone:Yasuo" class="quick-matchup-btn flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-hextech-cyan text-xs font-medium text-slate-200 transition">
+              <span class="px-1.5 py-0.5 rounded bg-hextech-cyan/15 text-hextech-cyan font-mono text-[10px]">MID</span>
+              <span>Yone vs Yasuo</span>
+            </button>
+            <button type="button" data-quick-matchup="TOP:Darius:Garen" class="quick-matchup-btn flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-hextech-gold text-xs font-medium text-slate-200 transition">
+              <span class="px-1.5 py-0.5 rounded bg-hextech-gold/15 text-hextech-gold font-mono text-[10px]">TOP</span>
+              <span>Darius vs Garen</span>
+            </button>
+            <button type="button" data-quick-matchup="MID:Ahri:Zed" class="quick-matchup-btn flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-hextech-cyan text-xs font-medium text-slate-200 transition">
+              <span class="px-1.5 py-0.5 rounded bg-hextech-cyan/15 text-hextech-cyan font-mono text-[10px]">MID</span>
+              <span>Ahri vs Zed</span>
+            </button>
+          </div>
         </div>
-      </div>
-
-      <!-- Barra Progresso Dual -->
-      <div class="w-full h-3.5 bg-slate-900 rounded-full overflow-hidden flex p-0.5 border border-slate-800">
-        <div id="allyWinBar" class="h-full bg-gradient-to-r from-cyan-600 to-hextech-cyan rounded-l-full transition-all duration-500" style="width: 51.8%"></div>
-        <div class="w-1 h-full bg-slate-950"></div>
-        <div id="enemyWinBar" class="h-full bg-gradient-to-l from-rose-600 to-rose-500 rounded-r-full transition-all duration-500" style="width: 48.2%"></div>
       </div>
     </section>
 
-    <!-- 3. GRID: DOMÍNIO AOS 15 MINUTOS (8 MÉTRICAS) + SETUP RECOMENDADO -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-      <!-- Coluna Esquerda: Telemetria @15 Min (7 Colunas) -->
-      <div class="lg:col-span-7 bg-hextech-card border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
-        <div>
-          <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-            <div class="flex items-center gap-2">
-              <i data-lucide="gauge" class="w-5 h-5 text-hextech-gold"></i>
-              <h2 class="font-display font-bold text-lg tracking-wide text-white uppercase">Domínio de Rota (@15 Minutos)</h2>
-            </div>
-            <span class="text-xs text-slate-400">Perspectiva: <strong id="telemetryPerspective" class="text-hextech-cyan">Aliado</strong></span>
-          </div>
-
-          <!-- 8 Cards de Estatísticas -->
-          <div id="statsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <!-- Preenchido dinamicamente pelo JS -->
-          </div>
+    <!-- ================= B. AVISO DE ESTATÍSTICAS INSUFICIENTES ================= -->
+    <section id="insufficientDataView" class="hidden bg-hextech-card border border-amber-500/30 rounded-2xl p-8 sm:p-12 text-center shadow-xl animate-fadeIn">
+      <div class="max-w-md mx-auto flex flex-col items-center">
+        <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-4">
+          <i data-lucide="bar-chart-2" class="w-7 h-7 text-amber-400"></i>
         </div>
-
-        <!-- Barra de Dica de Telemetria -->
-        <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-          <span class="flex items-center gap-1.5">
-            <i data-lucide="info" class="w-4 h-4 text-hextech-cyan"></i>
-            <span id="telemetryInsight">Vantagem consistente de farm e pressão nos primeiros 15 minutos.</span>
-          </span>
-          <span class="font-mono text-[11px] text-slate-500">Fonte: Mock Supabase / Riot API</span>
+        <h2 class="font-display font-bold text-xl sm:text-2xl text-white mb-2">
+          Estatísticas insuficientes para este confronto neste filtro. Aguardando coleta de partidas.
+        </h2>
+        <div id="alternateRoleHint" class="hidden my-3"></div>
+        <p class="text-xs text-slate-400 mb-6">
+          Confrontos com dados completos já disponíveis para teste imediato:
+        </p>
+        <div class="flex flex-wrap items-center justify-center gap-2">
+          <button type="button" data-quick-matchup="MID:Yone:Yasuo" class="quick-matchup-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 transition">
+            Yone vs Yasuo (Mid)
+          </button>
+          <button type="button" data-quick-matchup="TOP:Darius:Garen" class="quick-matchup-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 transition">
+            Darius vs Garen (Top)
+          </button>
+          <button type="button" data-quick-matchup="MID:Ahri:Zed" class="quick-matchup-btn px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs text-slate-200 transition">
+            Ahri vs Zed (Mid)
+          </button>
         </div>
       </div>
+    </section>
 
-      <!-- Coluna Direita: Setup Recomendado para o Matchup (5 Colunas) -->
-      <div class="lg:col-span-5 bg-hextech-card border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
-        <div>
-          <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-            <div class="flex items-center gap-2">
-              <i data-lucide="sparkles" class="w-5 h-5 text-hextech-cyan"></i>
-              <h2 class="font-display font-bold text-lg tracking-wide text-white uppercase">Setup Anti-Matchup</h2>
+    <!-- ================= C. PAINEL DE RESULTADOS (HEADER RESUMO + 4 ABAS) ================= -->
+    <div id="analysisContentView" class="hidden space-y-6 animate-fadeIn">
+
+      <!-- HEADER RESUMO COMPACTO DO CONFRONTO -->
+      <section class="bg-hextech-card border border-slate-800 rounded-xl p-4 sm:p-5 shadow-lg">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
+          <!-- Aliado Resumo -->
+          <div class="flex items-center gap-3">
+            <img id="summaryAllyImg" src="" alt="" class="w-11 h-11 rounded-lg border border-hextech-cyan object-cover" />
+            <div>
+              <div class="flex items-center gap-2">
+                <span id="summaryAllyName" class="font-display font-bold text-lg text-white">Aliado</span>
+                <span id="allyWinRateLabel" class="font-display font-bold text-2xl text-hextech-cyan">50.0%</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs text-slate-400">
+                <span id="summaryRoleEloText">MID • Esmeralda+</span>
+                <span id="matchupDifficultyBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  Equilibrado
+                </span>
+              </div>
             </div>
-            <span id="setupWinrateBadge" class="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
-              54.6% WR com este Setup
+          </div>
+
+          <!-- Centro: Total de Partidas + Modo 2v2 -->
+          <div class="flex flex-col items-start md:items-center text-xs text-slate-400">
+            <span class="flex items-center gap-1.5">
+              <i data-lucide="trophy" class="w-3.5 h-3.5 text-hextech-gold"></i>
+              <strong id="sampleSizeText" class="text-slate-200">0</strong> partidas analisadas
             </span>
+            <span id="summaryModeLabel" class="text-[11px] text-slate-500 mt-0.5">Confronto 1v1 na Rota</span>
           </div>
 
-          <!-- Runas Recomendadas -->
-          <div class="mb-4">
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Árvore de Runas Otimizada</div>
-            <div id="runesContainer" class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 flex items-center justify-between gap-2">
-              <!-- Preenchido via Data Dragon Runes -->
+          <!-- Inimigo Resumo -->
+          <div class="flex items-center justify-end gap-3">
+            <div class="text-right">
+              <div class="flex items-center justify-end gap-2">
+                <span id="enemyWinRateLabel" class="font-display font-bold text-2xl text-rose-400">50.0%</span>
+                <span id="summaryEnemyName" class="font-display font-bold text-lg text-white">Inimigo</span>
+              </div>
+              <span class="text-xs text-slate-400">Win Rate Oponente</span>
             </div>
-          </div>
-
-          <!-- Core Build + Item Counter Situacional -->
-          <div>
-            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Core Build (3 Itens) + Counter Situacional</div>
-            <div id="itemsContainer" class="grid grid-cols-4 gap-2.5">
-              <!-- Preenchido via Data Dragon Items -->
-            </div>
+            <img id="summaryEnemyImg" src="" alt="" class="w-11 h-11 rounded-lg border border-rose-500 object-cover" />
           </div>
         </div>
 
-        <div class="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400 flex items-center justify-between">
-          <span>Ordem de Skills: <strong id="skillOrderText" class="text-hextech-gold font-mono">Q > E > W</strong></span>
-          <span>Feitiços: <strong id="summonersText" class="text-slate-200">Flash + TP / Ignite</strong></span>
+        <!-- Barra Principal de Win Rate -->
+        <div class="w-full h-3.5 bg-slate-900 rounded-full overflow-hidden flex p-0.5 border border-slate-800">
+          <div id="allyWinBar" class="h-full bg-gradient-to-r from-cyan-600 to-hextech-cyan rounded-l-full transition-all duration-500" style="width: 50%"></div>
+          <div class="w-1 h-full bg-slate-950"></div>
+          <div id="enemyWinBar" class="h-full bg-gradient-to-l from-rose-600 to-rose-500 rounded-r-full transition-all duration-500" style="width: 50%"></div>
         </div>
-      </div>
+      </section>
+
+      <!-- BARRA DE NAVEGAÇÃO EM 4 ABAS -->
+      <nav class="bg-hextech-card border border-slate-800 rounded-xl p-1.5 grid grid-cols-2 lg:grid-cols-4 gap-1.5" aria-label="Abas de Análise">
+        <button type="button" data-tab="overview" class="tab-btn flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-hextech-cyan/15 text-hextech-cyan border border-hextech-cyan/40">
+          <i data-lucide="pie-chart" class="w-4 h-4"></i>
+          <span>1. Visão Geral & Win Rate</span>
+        </button>
+        <button type="button" data-tab="lane15" class="tab-btn flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+          <i data-lucide="gauge" class="w-4 h-4"></i>
+          <span>2. Fase de Rotas (@15 min)</span>
+        </button>
+        <button type="button" data-tab="builds" class="tab-btn flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>3. Builds & Runas</span>
+        </button>
+        <button type="button" data-tab="aicoach" class="tab-btn flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-white transition-all border border-transparent">
+          <i data-lucide="bot" class="w-4 h-4"></i>
+          <span>4. Coach de IA</span>
+        </button>
+      </nav>
+
+      <!-- CONTEÚDO DA ABA 1: VISÃO GERAL & WIN RATE -->
+      <section id="tabPanel-overview" class="tab-panel space-y-6 animate-fadeIn">
+        <div id="overviewContent" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- Renderizado dinamicamente pelo JS -->
+        </div>
+      </section>
+
+      <!-- CONTEÚDO DA ABA 2: FASE DE ROTAS (@15 MIN) -->
+      <section id="tabPanel-lane15" class="tab-panel hidden space-y-6 animate-fadeIn">
+        <div id="lane15Content" class="bg-hextech-card border border-slate-800 rounded-xl p-5 sm:p-6">
+          <!-- Renderizado dinamicamente pelo JS -->
+        </div>
+      </section>
+
+      <!-- CONTEÚDO DA ABA 3: BUILDS & RUNAS -->
+      <section id="tabPanel-builds" class="tab-panel hidden space-y-6 animate-fadeIn">
+        <div id="buildsContent" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- Renderizado dinamicamente pelo JS -->
+        </div>
+      </section>
+
+      <!-- CONTEÚDO DA ABA 4: COACH DE IA -->
+      <section id="tabPanel-aicoach" class="tab-panel hidden space-y-4 animate-fadeIn">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-hextech-card border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-hextech-cyan/15 border border-hextech-cyan/40 flex items-center justify-center">
+              <i data-lucide="bot" class="w-4 h-4 text-hextech-cyan"></i>
+            </div>
+            <div>
+              <h2 class="font-display font-bold text-lg tracking-wide text-white uppercase flex items-center gap-2">
+                Plano de Jogo — AI Laning Coach
+                <span id="aiModeBadge" class="text-[11px] font-sans font-semibold px-2.5 py-0.5 rounded bg-slate-800 text-hextech-gold border border-hextech-gold/30">Modo 1v1 Isolado</span>
+              </h2>
+            </div>
+          </div>
+          <span class="text-xs text-slate-400">Dicas diretas e escaneáveis para vencer a rota</span>
+        </div>
+
+        <div id="aiCoachGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <!-- Renderizado dinamicamente pelo JS -->
+        </div>
+      </section>
 
     </div>
 
-    <!-- 4. COACH DE IA EM 5 CARDS ESCANEÁVEIS -->
-    <section class="space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-lg bg-hextech-cyan/15 border border-hextech-cyan/40 flex items-center justify-center">
-            <i data-lucide="bot" class="w-4 h-4 text-hextech-cyan"></i>
-          </div>
-          <div>
-            <h2 class="font-display font-bold text-xl tracking-wide text-white uppercase flex items-center gap-2">
-              Plano de Jogo — AI Laning Coach
-              <span id="aiModeBadge" class="text-[11px] font-sans font-semibold px-2 py-0.5 rounded bg-slate-800 text-hextech-gold border border-hextech-gold/30">Modo 1v1 Isolado</span>
-            </h2>
-          </div>
-        </div>
-        <button id="btnRegenerateAI" class="self-start sm:self-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-hextech-cyan border border-hextech-cyan/30 transition">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-          <span>Recalcular Análise Tática</span>
-        </button>
-      </div>
-
-      <!-- Grid dos 5 Cards Escaneáveis -->
-      <div id="aiCoachGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <!-- Renderizado dinamicamente pelo JS -->
-      </div>
-    </section>
-
   </main>
 
-  <!-- ================= MODAL DE SELEÇÃO DE CAMPEÃO (PESQUISÁVEL) ================= -->
+  <!-- ================= MODAL DE SELEÇÃO DE CAMPEÃO COM FILTRO DE ÍCONES POR LANE ================= -->
   <div id="championModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-hextech-card border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[82vh] flex flex-col shadow-2xl overflow-hidden">
+    <div class="bg-hextech-card border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
       <!-- Modal Header -->
       <div class="p-4 border-b border-slate-800 flex items-center justify-between">
         <div>
           <h3 id="modalTitle" class="font-display font-bold text-lg text-white uppercase tracking-wider">Selecionar Campeão</h3>
-          <p class="text-xs text-slate-400">Dados oficiais carregados via Riot Data Dragon API</p>
+          <p class="text-xs text-slate-400">Use os filtros de rota abaixo ou selecione "Todas" para escolher qualquer campeão</p>
         </div>
-        <button id="btnCloseModal" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+        <button id="btnCloseModal" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
-      <!-- Search Input -->
-      <div class="p-4 border-b border-slate-800 bg-slate-900/60">
+      <!-- Busca + Barra de Filtro com Ícones de cada Lane -->
+      <div class="p-4 border-b border-slate-800 bg-slate-900/60 space-y-3">
         <div class="relative">
           <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
           <input
             id="championSearchInput"
             type="text"
-            placeholder="Buscar campeão pelo nome (ex: Aatrox, Ahri, Darius, Yone)..."
+            placeholder="Buscar campeão pelo nome (ex: Yone, Yasuo, Darius, Garen, Ahri, Zed)..."
             class="w-full bg-slate-950 border border-slate-700 focus:border-hextech-cyan rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none"
           />
         </div>
+
+        <!-- Barra de Filtro de Lanes com Ícones no Modal -->
+        <div class="flex flex-wrap items-center gap-1.5" id="modalLaneFilterGroup">
+          <button type="button" data-modal-lane="ALL" class="modal-lane-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-hextech-cyan/20 text-hextech-cyan border border-hextech-cyan/40">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+            <span>Todas</span>
+          </button>
+          <button type="button" data-modal-lane="TOP" class="modal-lane-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-slate-950/80 border border-slate-800 transition-all">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h13l-3 3H7v7l-3 3V4zm16 16H7l3-3h7v-7l3-3v13zm-9.5-9.5h3v3h-3v-3z"/></svg>
+            <span>Top</span>
+          </button>
+          <button type="button" data-modal-lane="JUNGLE" class="modal-lane-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-slate-950/80 border border-slate-800 transition-all">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c1.5 3.5 4.5 6 4.5 10a4.5 4.5 0 01-9 0C7.5 9 10.5 6.5 12 3zm-6 7c1 2.2 2.5 4 2.5 6.5A2.5 2.5 0 016 19a2.5 2.5 0 01-2.5-2.5C3.5 14 5 12.2 6 10zm12 0c1 2.2 2.5 4 2.5 6.5A2.5 2.5 0 0118 19a2.5 2.5 0 01-2.5-2.5c0-2.5 1.5-4.3 2.5-6.5z"/></svg>
+            <span>Jungle</span>
+          </button>
+          <button type="button" data-modal-lane="MID" class="modal-lane-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-slate-950/80 border border-slate-800 transition-all">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h6L4 10V4zm16 16h-6l6-6v6zM17.5 4H20v2.5L6.5 20H4v-2.5L17.5 4z"/></svg>
+            <span>Mid</span>
+          </button>
+          <button type="button" data-modal-lane="ADC" class="modal-lane-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-slate-950/80 border border-slate-800 transition-all">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M20 20H7l3-3h7v-7l3-3v13zM4 4h13l-3 3H7v7l-3 3V4zm6.5 6.5h3v3h-3v-3z"/></svg>
+            <span>ADC</span>
+          </button>
+          <button type="button" data-modal-lane="SUPPORT" class="modal-lane-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-slate-950/80 border border-slate-800 transition-all">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l8 3.5v5.5c0 5-3.4 9.6-8 11-4.6-1.4-8-6-8-11V6.5L12 3zm-1 5v3H8v2h3v3h2v-3h3v-2h-3V8h-2z"/></svg>
+            <span>Suporte</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Lista de Campeões -->
+      <!-- Grade de Campeões -->
       <div id="championGridList" class="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2.5">
-        <!-- Populado pelo Data Dragon -->
+        <!-- Populado dinamicamente pelo Data Dragon -->
       </div>
     </div>
   </div>
 
-  <!-- ================= FOOTER ================= -->
+  <!-- ================= FOOTER LIMPO PARA O JOGADOR ================= -->
   <footer class="border-t border-slate-800/80 py-5 mt-10 text-center text-xs text-slate-500">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-      <p>RiftCoach.GG não é endossado pela Riot Games. Assets servidos em tempo real via <strong>Riot Data Dragon CDN</strong>.</p>
-      <p class="font-mono text-[11px]">Arquitetura pronta para Supabase (PostgreSQL) + Gemini API</p>
+      <p>RiftCoach.GG — Plataforma de Análise de Matchups e Fase de Rotas de League of Legends.</p>
+      <p>RiftCoach.GG não é endossado pela Riot Games.</p>
     </div>
   </footer>
 
   <!-- Scripts da Aplicação -->
+  <script src="./js/matchups-fallback.js"></script>
   <script src="./js/services.js"></script>
   <script src="./js/app.js"></script>
 </body>

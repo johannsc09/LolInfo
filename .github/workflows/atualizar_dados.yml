@@ -1,0 +1,52 @@
+name: Atualizar Dados de Matchups (Data Dragon & Riot API)
+
+on:
+  schedule:
+    # Roda automaticamente todo dia às 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar-dados:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Executar coletor (Data Dragon + Riot API opcional)
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+        run: |
+          python scripts/coletor_riot.py
+
+      - name: Commit e Push automático se houver alterações em data/matchups.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if ! git diff --quiet data/matchups.json; then
+            git add data/matchups.json js/matchups-fallback.js
+            git commit -m "chore(data): atualizar estatísticas de matchups e patch [skip ci]"
+            git push origin HEAD:main
+            git push origin HEAD:gh-pages || true
+            echo "Dados atualizados e enviados para a branch principal com sucesso."
+          else
+            echo "Nenhuma alteração detectada em data/matchups.json."
+          fi

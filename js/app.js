@@ -57,6 +57,7 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
   const {
     MIN_ELO_SAMPLE_SIZE,
     loadMatchupsDatabase,
+    hydrateCompactPairRecord,
     invertStatsSymmetrically,
     invertDifficulty,
     buildDynamicAICoachCards
@@ -64,6 +65,7 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
 
   const db = await loadMatchupsDatabase();
   const matchupsMap = db?.matchups || {};
+  const compactPairs = db?.compactPairs || {};
   const profilesMap = db?.championProfiles || {};
 
   const directKey = `${role}:${ally.id}:${enemy.id}`;
@@ -72,10 +74,23 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
   let rawRecord = matchupsMap[directKey];
   let isSymmetricInversion = false;
 
-  // 1. Inversão Simétrica Automática: se não existir A vs B, busca B vs A
+  // 1. Inversão Simétrica Automática em confrontos detalhados (B vs A -> A vs B)
   if (!rawRecord && matchupsMap[reverseKey]) {
     rawRecord = matchupsMap[reverseKey];
     isSymmetricInversion = true;
+  }
+
+  // 1b. Consulta na matriz compacta universal (compactPairs) gerada pelo coletor_riot.py
+  if (!rawRecord) {
+    const directPairKey = `${ally.id}:${enemy.id}`;
+    const reversePairKey = `${enemy.id}:${ally.id}`;
+    if (compactPairs[directPairKey]) {
+      rawRecord = hydrateCompactPairRecord(compactPairs[directPairKey], role, ally.id, enemy.id, db);
+      isSymmetricInversion = false;
+    } else if (compactPairs[reversePairKey]) {
+      rawRecord = hydrateCompactPairRecord(compactPairs[reversePairKey], role, enemy.id, ally.id, db);
+      isSymmetricInversion = true;
+    }
   }
 
   if (!rawRecord) {

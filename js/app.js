@@ -1,11 +1,15 @@
 /**
  * ============================================================================
- * RIFTCOACH.GG - CONTROLADOR PRINCIPAL DA APLICAÇÃO
+ * RIFTCOACH.GG - CONTROLADOR PRINCIPAL DA APLICAÇÃO (app.js)
+ * Suporta:
+ * 1. Inversão Simétrica Automática (A vs B calculado a partir de B vs A)
+ * 2. Fallback por Elo para GLOBAL com aviso discreto na interface
+ * 3. Base completa de campeões do League of Legends (data/matchups.json)
  * ============================================================================
  */
 
 const STATE = {
-  patch: '14.23.1',
+  patch: '16.22.1',
   champions: {},
   championList: [],
   role: 'TOP',
@@ -13,7 +17,7 @@ const STATE = {
   ally: null,          // Começa vazio na primeira visita
   enemy: null,         // Começa vazio na primeira visita
   junglerActive: false,
-  enemyJungler: null,  // Começa vazio até ser escolhido
+  enemyJungler: null,
   modalTarget: 'ally', // 'ally' | 'enemy' | 'jungler'
   modalLaneFilter: 'ALL',
   activeTab: 'overview' // 'overview' | 'lane15' | 'builds' | 'aicoach'
@@ -42,6 +46,128 @@ const ROLE_LABELS = {
   SUPPORT: 'Suporte'
 };
 
+/**
+ * ============================================================================
+ * LEITURA DE ESTATÍSTICAS COM INVERSÃO SIMÉTRICA & FALLBACK POR ELO
+ * ============================================================================
+ */
+async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, enemyJungler }) {
+  if (!ally || !enemy || !role || !elo || ally.id === enemy.id) return null;
+
+  const {
+    MIN_ELO_SAMPLE_SIZE,
+    loadMatchupsDatabase,
+    invertStatsSymmetrically,
+    invertDifficulty,
+    buildDynamicAICoachCards
+  } = window.RiftServices;
+
+  const db = await loadMatchupsDatabase();
+  const matchupsMap = db?.matchups || {};
+  const profilesMap = db?.championProfiles || {};
+
+  const directKey = `${role}:${ally.id}:${enemy.id}`;
+  const reverseKey = `${role}:${enemy.id}:${ally.id}`;
+
+  let rawRecord = matchupsMap[directKey];
+  let isSymmetricInversion = false;
+
+  // 1. Inversão Simétrica Automática: se não existir A vs B, busca B vs A
+  if (!rawRecord && matchupsMap[reverseKey]) {
+    rawRecord = matchupsMap[reverseKey];
+    isSymmetricInversion = true;
+  }
+
+  if (!rawRecord) {
+    return null;
+  }
+
+  // 2. Fallback Automático por Elo: se o elo filtrado não tiver amostra suficiente, usa GLOBAL
+  const eloDict = rawRecord.baseStatsByElo || {};
+  let selectedEloStats = eloDict[elo];
+  let isEloFallback = false;
+
+  if (
+    elo !== 'GLOBAL' &&
+    (!selectedEloStats || (selectedEloStats.gamesAnalyzed || 0) < MIN_ELO_SAMPLE_SIZE)
+  ) {
+    selectedEloStats = eloDict['GLOBAL'] || eloDict['EMERALD_PLUS'];
+    isEloFallback = true;
+  }
+
+  if (!selectedEloStats) {
+    return null;
+  }
+
+  // Clona estatísticas e aplica inversão simétrica caso o registro venha de (B vs A)
+  let stats = JSON.parse(JSON.stringify(selectedEloStats));
+  let difficulty = rawRecord.difficulty || 'Equilibrado';
+
+  if (isSymmetricInversion) {
+    stats = invertStatsSymmetrically(stats);
+    difficulty = invertDifficulty(difficulty);
+  }
+
+  // Resolve Builds & Runas do campeão Aliado (do registro direto ou do catálogo de campeões)
+  let buildsAndRunes = null;
+  if (!isSymmetricInversion && rawRecord.buildsAndRunes) {
+    buildsAndRunes = JSON.parse(JSON.stringify(rawRecord.buildsAndRunes));
+  } else if (profilesMap[ally.id]) {
+    buildsAndRunes = JSON.parse(JSON.stringify(profilesMap[ally.id]));
+    // Personaliza a explicação do item de counter contra o oponente atual
+    if (buildsAndRunes.counterItem) {
+      buildsAndRunes.counterItem.reason = `${buildsAndRunes.counterItem.reason.replace(/\.$/, '')} contra ${enemy.name}.`;
+    }
+  }
+
+  // Resolve os 5 Cards do Coach de IA
+  let aiCards = null;
+  if (!isSymmetricInversion && rawRecord.aiCoach?.cards) {
+    aiCards = JSON.parse(JSON.stringify(rawRecord.aiCoach.cards));
+  } else {
+    aiCards = buildDynamicAICoachCards(ally, enemy, stats, buildsAndRunes);
+  }
+
+  // 3. Modificador Modo 2v2 (+ Jungler Inimigo)
+  if (junglerActive && enemyJungler) {
+    const overrides = (!isSymmetricInversion && rawRecord.aiCoach?.junglerOverrides) || {};
+    const jgOverride = overrides[enemyJungler.id] || overrides.DEFAULT;
+
+    const wrDelta = jgOverride ? Number(jgOverride.winRateDelta || -1.4) : -1.4;
+    stats.winRate = Number(Math.min(65, Math.max(35, stats.winRate + wrDelta)).toFixed(1));
+    stats.enemyWinRate = Number((100 - stats.winRate).toFixed(1));
+    stats.deltaWr = Number((stats.deltaWr + wrDelta).toFixed(1));
+
+    const card04 = aiCards.find(c => c.step === '04');
+    if (card04) {
+      card04.subtitle = jgOverride && overrides[enemyJungler.id]
+        ? jgOverride.subtitle
+        : `Ameaça 2v2: ${enemy.name} + ${enemyJungler.name}`;
+      card04.accent = 'red';
+      card04.bullets = jgOverride
+        ? jgOverride.bullets.map(b => b.replace(/Jungler inimigo|Jungler adversário/gi, enemyJungler.name))
+        : [
+            `ALERTA 2v2: ${enemy.name} + ${enemyJungler.name} possuem forte pressão de gank e controle de grupo antes dos 6 min.`,
+            `Posicione visão profunda no rio aos 2:45 para rastrear a primeira rotação de ${enemyJungler.name}.`,
+            `Guarde sua habilidade de mobilidade/escape exclusivamente caso ${enemyJungler.name} esteja fora do minimapa.`
+          ];
+    }
+  }
+
+  return {
+    allyId: ally.id,
+    enemyId: enemy.id,
+    role,
+    elo,
+    isEloFallback,
+    isSymmetricInversion,
+    difficulty,
+    stats,
+    buildsAndRunes,
+    aiCards
+  };
+}
+
 async function initApp() {
   try {
     await window.RiftServices.loadMatchupsDatabase();
@@ -59,12 +185,6 @@ async function initApp() {
   }
 }
 
-/**
- * Atualiza os seletores do topo e decide qual visão exibir:
- * - Tela inicial vazia (quando ally ou enemy == null)
- * - Tela de estatísticas insuficientes (quando não há registro no JSON)
- * - Painel completo com Header Resumo + 4 Abas
- */
 async function refreshDashboard() {
   updateTopSelectorCards();
 
@@ -83,21 +203,20 @@ async function refreshDashboard() {
 
   emptyView.classList.add('hidden');
 
-  // 2. Consulta o JSON de confrontos
-  const analysis = await window.RiftServices.getMatchupAnalysis(STATE);
+  // 2. Consulta estatísticas (com suporte a Inversão Simétrica e Fallback por Elo)
+  const analysis = await resolveMatchupAnalysis(STATE);
 
   if (!analysis) {
     insufficientView.classList.remove('hidden');
     analysisView.classList.add('hidden');
 
-    // Verifica se o mesmo confronto existe em outra rota para oferecer atalho rápido
     const altHint = document.getElementById('alternateRoleHint');
     const availableRoles = await window.RiftServices.getAvailableRolesForPair(STATE.ally.id, STATE.enemy.id);
     if (altHint && availableRoles.length > 0) {
       altHint.classList.remove('hidden');
       altHint.innerHTML = availableRoles.map(r => `
         <button type="button" data-switch-role="${r}" class="switch-role-hint-btn inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-hextech-cyan/20 hover:bg-hextech-cyan/30 border border-hextech-cyan/50 text-xs font-semibold text-hextech-cyan transition">
-          <span>Confronto encontrado na rota <strong>${ROLE_LABELS[r]}</strong> — Clique para alternar para ${ROLE_LABELS[r]}</span>
+          <span>Confronto disponível na rota <strong>${ROLE_LABELS[r]}</strong> — Alternar para ${ROLE_LABELS[r]}</span>
         </button>
       `).join(' ');
       altHint.querySelectorAll('.switch-role-hint-btn').forEach(btn => {
@@ -131,9 +250,6 @@ async function refreshDashboard() {
   }
 }
 
-/**
- * Atualiza os cards de seleção de Campeão Aliado, Inimigo e Jungler no topo
- */
 function updateTopSelectorCards() {
   const { getChampionIconUrl } = window.RiftServices;
 
@@ -192,17 +308,13 @@ function updateTopSelectorCards() {
     document.getElementById('junglerName').textContent = 'Selecionar Jungler';
   }
 
-  // Botão de inverter confronto
   const swapBtn = document.getElementById('btnSwapChamps');
   swapBtn.disabled = !(STATE.ally && STATE.enemy);
 }
 
-/**
- * Renderiza o Header Resumo Compacto acima das 4 abas
- */
 function renderSummaryHeader(analysis) {
   const { getChampionIconUrl } = window.RiftServices;
-  const { stats } = analysis;
+  const { stats, isEloFallback } = analysis;
 
   document.getElementById('summaryAllyImg').src = getChampionIconUrl(STATE.patch, STATE.ally.id);
   document.getElementById('summaryAllyName').textContent = STATE.ally.name;
@@ -225,6 +337,12 @@ function renderSummaryHeader(analysis) {
   } else {
     modeLabel.textContent = 'Confronto 1v1 na Rota';
     modeLabel.className = 'text-[11px] text-slate-400 mt-0.5';
+  }
+
+  // Exibe ou oculta o aviso discreto de Fallback por Elo
+  const fallbackNotice = document.getElementById('eloFallbackNotice');
+  if (fallbackNotice) {
+    fallbackNotice.classList.toggle('hidden', !isEloFallback);
   }
 
   const badge = document.getElementById('matchupDifficultyBadge');
@@ -278,7 +396,7 @@ function getDifficultyStyle(difficulty, winRate) {
  * ABA 1: VISÃO GERAL & WIN RATE
  */
 function renderTabOverview(analysis) {
-  const { stats } = analysis;
+  const { stats, isEloFallback } = analysis;
   const diffInfo = getDifficultyStyle(analysis.difficulty, stats.winRate);
   const deltaSign = stats.deltaWr > 0 ? '+' : '';
   const deltaColor = stats.deltaWr >= 0 ? 'text-emerald-400' : 'text-rose-400';
@@ -291,53 +409,49 @@ function renderTabOverview(analysis) {
 
   const container = document.getElementById('overviewContent');
   container.innerHTML = `
-    <!-- Coluna Esquerda: Métricas Principais de Win Rate, Delta e Presença -->
     <div class="lg:col-span-7 bg-hextech-card border border-slate-800 rounded-xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
           <i data-lucide="activity" class="w-5 h-5 text-hextech-cyan"></i>
           <h3 class="font-display font-bold text-lg text-white uppercase tracking-wide">Desempenho Geral no Confronto</h3>
         </div>
-        <span class="text-xs text-slate-400">${ROLE_LABELS[STATE.role]} • ${ELO_LABELS[STATE.elo]}</span>
+        <div class="flex items-center gap-2">
+          ${isEloFallback ? `<span class="text-[11px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">Exibindo dados Globais (amostra baixa no elo selecionado)</span>` : ''}
+          <span class="text-xs text-slate-400">${ROLE_LABELS[STATE.role]} • ${isEloFallback ? 'Global' : ELO_LABELS[STATE.elo]}</span>
+        </div>
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
-        <!-- Win Rate do Confronto -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <div class="text-xs text-slate-400 mb-1">Win Rate (${STATE.ally.name})</div>
           <div class="font-display font-bold text-2xl ${stats.winRate >= 50 ? 'text-hextech-cyan' : 'text-rose-400'}">${stats.winRate}%</div>
           <div class="text-[11px] text-slate-500 mt-1">vs ${stats.enemyWinRate}% de ${STATE.enemy.name}</div>
         </div>
 
-        <!-- Delta Win Rate -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <div class="text-xs text-slate-400 mb-1">Vantagem (Delta WR)</div>
           <div class="font-display font-bold text-2xl ${deltaColor}">${deltaSign}${stats.deltaWr}%</div>
           <div class="text-[11px] text-slate-500 mt-1">Acima da média do patch</div>
         </div>
 
-        <!-- Nível de Dificuldade -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 col-span-2 sm:col-span-1">
           <div class="text-xs text-slate-400 mb-1">Dificuldade</div>
           <div class="font-display font-bold text-xl ${diffInfo.textClass}">${diffInfo.label}</div>
           <div class="text-[11px] text-slate-500 mt-1">Classificação tática</div>
         </div>
 
-        <!-- Pick Rate -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <div class="text-xs text-slate-400 mb-1">Pick Rate</div>
           <div class="font-display font-bold text-xl text-white">${stats.pickRate}%</div>
           <div class="text-[11px] text-slate-500 mt-1">Taxa de escolha no elo</div>
         </div>
 
-        <!-- Ban Rate -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <div class="text-xs text-slate-400 mb-1">Ban Rate</div>
           <div class="font-display font-bold text-xl text-hextech-gold">${stats.banRate}%</div>
           <div class="text-[11px] text-slate-500 mt-1">Taxa de banimento</div>
         </div>
 
-        <!-- Taxa de Presença -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <div class="text-xs text-slate-400 mb-1">Taxa de Presença</div>
           <div class="font-display font-bold text-xl text-slate-200">${stats.presenceRate}%</div>
@@ -345,14 +459,12 @@ function renderTabOverview(analysis) {
         </div>
       </div>
 
-      <!-- Resumo da Dificuldade -->
       <div class="bg-slate-900/70 border border-slate-800/90 rounded-xl p-3.5 flex items-center gap-3 text-xs text-slate-300">
         <i data-lucide="shield-alert" class="w-4 h-4 text-hextech-gold shrink-0"></i>
         <span>${diffInfo.desc}</span>
       </div>
     </div>
 
-    <!-- Coluna Direita: Win Rate por Duração da Partida -->
     <div class="lg:col-span-5 bg-hextech-card border border-slate-800 rounded-xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
       <div>
         <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-5">
@@ -435,7 +547,7 @@ function renderTabLane15(analysis) {
     }
   ];
 
-  const enemyFb = Math.max(8.0, Number((38.0 - lane15.firstBloodPct).toFixed(1)));
+  const enemyFb = Math.max(8.0, Number((40.0 - lane15.firstBloodPct).toFixed(1)));
   const enemyPlates = Math.max(0.5, Number((3.1 - lane15.platesBefore14).toFixed(1)));
 
   const container = document.getElementById('lane15Content');
@@ -457,7 +569,6 @@ function renderTabLane15(analysis) {
       </div>
     </div>
 
-    <!-- Barras Comparativas Lado a Lado -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
       ${compareRows.map(row => `
         <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-2.5">
@@ -477,7 +588,6 @@ function renderTabLane15(analysis) {
       `).join('')}
     </div>
 
-    <!-- Indicadores de Agressividade e Torres Antes dos 14m -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
         <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
@@ -528,7 +638,6 @@ function renderTabBuilds(analysis) {
 
   const container = document.getElementById('buildsContent');
   container.innerHTML = `
-    <!-- Coluna Esquerda: Página de Runas Recomendada -->
     <div class="lg:col-span-5 bg-hextech-card border border-slate-800 rounded-xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
       <div>
         <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
@@ -541,7 +650,6 @@ function renderTabBuilds(analysis) {
           </span>
         </div>
 
-        <!-- Árvore Primária -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 mb-3.5">
           <div class="flex items-center gap-3 mb-3">
             <img src="${runes.keystone.icon}" alt="${runes.keystone.name}" class="w-12 h-12 rounded-full bg-slate-950 p-1 border border-hextech-gold/60" />
@@ -557,7 +665,6 @@ function renderTabBuilds(analysis) {
           </div>
         </div>
 
-        <!-- Árvore Secundária -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 mb-3.5">
           <div class="flex items-center gap-2.5 mb-2.5">
             <img src="${runes.secondaryIcon}" alt="${runes.secondaryTree}" class="w-6 h-6" />
@@ -570,7 +677,6 @@ function renderTabBuilds(analysis) {
           </div>
         </div>
 
-        <!-- Fragmentos (Shards) -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
           <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Fragmentos de Atributo (Shards)</div>
           <div class="flex flex-wrap gap-2">
@@ -581,7 +687,6 @@ function renderTabBuilds(analysis) {
         </div>
       </div>
 
-      <!-- Feitiços de Invocador -->
       <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between text-xs">
         <span class="text-slate-400 font-medium">Feitiços de Invocador Recomendados:</span>
         <span class="font-bold text-white bg-slate-950 px-3 py-1 rounded-md border border-slate-700">
@@ -590,7 +695,6 @@ function renderTabBuilds(analysis) {
       </div>
     </div>
 
-    <!-- Coluna Direita: Itens Iniciais, Core Build, Botas, Counter Item & Ordem de Habilidades -->
     <div class="lg:col-span-7 bg-hextech-card border border-slate-800 rounded-xl p-5 sm:p-6 flex flex-col justify-between space-y-5">
       <div class="space-y-5">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -601,7 +705,6 @@ function renderTabBuilds(analysis) {
           <span class="text-xs text-slate-400">vs ${STATE.enemy.name}</span>
         </div>
 
-        <!-- Linha 1: Itens Iniciais + Botas -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
             <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2.5">Itens Iniciais</div>
@@ -627,7 +730,6 @@ function renderTabBuilds(analysis) {
           </div>
         </div>
 
-        <!-- Linha 2: Core Build (1º, 2º e 3º Itens) -->
         <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3">Core Build (1º, 2º e 3º Itens)</div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -646,7 +748,6 @@ function renderTabBuilds(analysis) {
           </div>
         </div>
 
-        <!-- Linha 3: Item Situacional de Counter Destacado -->
         <div class="bg-amber-950/20 border border-hextech-gold/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 gold-glow">
           <div class="flex items-center gap-3.5">
             <div class="relative shrink-0">
@@ -661,7 +762,6 @@ function renderTabBuilds(analysis) {
         </div>
       </div>
 
-      <!-- Ordem de Maximização de Habilidades -->
       <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">Ordem de Maximização de Habilidades</span>
@@ -727,9 +827,6 @@ function renderTabAICoach(analysis) {
   }).join('');
 }
 
-/**
- * Alternância visual das 4 Abas
- */
 function updateActiveTabUI() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     const isActive = btn.dataset.tab === STATE.activeTab;
@@ -746,9 +843,6 @@ function updateActiveTabUI() {
   });
 }
 
-/**
- * Modal de Seleção de Campeão com Filtro de Ícones por Lane
- */
 function openChampionModal(target) {
   STATE.modalTarget = target;
   const titles = {
@@ -759,7 +853,6 @@ function openChampionModal(target) {
   document.getElementById('modalTitle').textContent = titles[target];
   document.getElementById('championSearchInput').value = '';
 
-  // Se abriu para escolher o Jungler, pré-seleciona o filtro JUNGLE (mas permite clicar em Todas)
   setModalLaneFilter(target === 'jungler' ? 'JUNGLE' : 'ALL');
 
   document.getElementById('championModal').classList.remove('hidden');
@@ -838,13 +931,11 @@ function setRoleUI(role) {
 }
 
 function setupEventListeners() {
-  // Seletores de Campeão
   document.getElementById('btnSelectAlly').addEventListener('click', () => openChampionModal('ally'));
   document.getElementById('btnSelectEnemy').addEventListener('click', () => openChampionModal('enemy'));
   document.getElementById('btnSelectJungler').addEventListener('click', () => openChampionModal('jungler'));
   document.getElementById('btnCloseModal').addEventListener('click', closeChampionModal);
 
-  // Fechar modal clicando no fundo ou apertando ESC
   document.getElementById('championModal').addEventListener('click', (e) => {
     if (e.target.id === 'championModal') closeChampionModal();
   });
@@ -852,19 +943,16 @@ function setupEventListeners() {
     if (e.key === 'Escape') closeChampionModal();
   });
 
-  // Busca por nome dentro do modal
   document.getElementById('championSearchInput').addEventListener('input', (e) => {
     renderChampionModalList(e.target.value);
   });
 
-  // Filtro de ícones por Lane dentro do modal
   document.querySelectorAll('.modal-lane-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       setModalLaneFilter(btn.dataset.modalLane);
     });
   });
 
-  // Botão Inverter Confronto
   document.getElementById('btnSwapChamps').addEventListener('click', () => {
     if (!STATE.ally && !STATE.enemy) return;
     const temp = STATE.ally;
@@ -873,7 +961,6 @@ function setupEventListeners() {
     refreshDashboard();
   });
 
-  // Toggle + Jungler Inimigo
   document.getElementById('btnToggleJungler').addEventListener('click', () => {
     STATE.junglerActive = !STATE.junglerActive;
     const container = document.getElementById('enemyJunglerContainer');
@@ -884,7 +971,6 @@ function setupEventListeners() {
       container.classList.remove('hidden');
       btn.className = 'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all bg-amber-500/20 border-amber-500 text-amber-300';
       label.textContent = 'Remover Jungler (2v2)';
-      // Se ainda não tiver escolhido um Jungler, define Lee Sin como inicial ou abre seleção
       if (!STATE.enemyJungler && STATE.champions['LeeSin']) {
         STATE.enemyJungler = STATE.champions['LeeSin'];
       }
@@ -896,7 +982,6 @@ function setupEventListeners() {
     refreshDashboard();
   });
 
-  // Filtro de Rota da Análise (na barra superior)
   document.querySelectorAll('.role-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       setRoleUI(btn.dataset.role);
@@ -904,13 +989,11 @@ function setupEventListeners() {
     });
   });
 
-  // Filtro de Elo
   document.getElementById('eloSelect').addEventListener('change', (e) => {
     STATE.elo = e.target.value;
     refreshDashboard();
   });
 
-  // Navegação das 4 Abas
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       STATE.activeTab = btn.dataset.tab;
@@ -918,7 +1001,6 @@ function setupEventListeners() {
     });
   });
 
-  // Atalhos rápidos de confrontos cadastrados
   document.querySelectorAll('.quick-matchup-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const [role, allyId, enemyId] = btn.dataset.quickMatchup.split(':');

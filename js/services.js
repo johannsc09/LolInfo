@@ -1,19 +1,21 @@
 /**
  * ============================================================================
  * RIFTCOACH.GG - SERVIÇOS DE DADOS (Riot Data Dragon + data/matchups.json)
+ * Suporta:
+ * 1. Inversão Simétrica Automática (A vs B a partir de B vs A)
+ * 2. Fallback Automático por Elo (para GLOBAL quando amostra é baixa/ausente)
  * ============================================================================
  */
 
 let MATCHUPS_DB = null;
+const MIN_ELO_SAMPLE_SIZE = 100;
 
 /**
  * Mapeamento de Campeões por Rota (Top, Jungle, Mid, ADC, Support)
- * Usado pelo filtro de ícones de Lane dentro do Modal de Seleção.
- * O botão "Todas" exibe todos os campeões permitindo flex picks em qualquer rota.
  */
 const CHAMPION_LANES = {
   TOP: [
-    'Aatrox', 'Akali', 'Ambessa', 'aurora', 'Camille', 'ChoGath', 'Darius', 'DrMundo', 'Fiora',
+    'Aatrox', 'Akali', 'Ambessa', 'Aurora', 'Camille', 'ChoGath', 'Darius', 'DrMundo', 'Fiora',
     'Gangplank', 'Garen', 'Gnar', 'Gragas', 'Gwen', 'Heimerdinger', 'Illaoi', 'Irelia', 'Jax',
     'Jayce', 'KSante', 'Kayle', 'Kennen', 'Kled', 'Malphite', 'Mordekaiser', 'Nasus', 'Olaf',
     'Ornn', 'Pantheon', 'Poppy', 'Quinn', 'Renekton', 'Riven', 'Rumble', 'Sett', 'Shen',
@@ -51,16 +53,12 @@ const CHAMPION_LANES = {
   ]
 };
 
-/**
- * Verifica se um campeão pertence a uma rota no filtro do modal
- */
 function championMatchesLane(champion, laneFilter) {
   if (!laneFilter || laneFilter === 'ALL') return true;
   const list = CHAMPION_LANES[laneFilter] || [];
   if (list.some(id => id.toLowerCase() === champion.id.toLowerCase())) {
     return true;
   }
-  // Fallback pelas tags do Data Dragon para novos campeões lançados no patch
   const tags = champion.tags || [];
   if (laneFilter === 'TOP' && (tags.includes('Fighter') || tags.includes('Tank'))) return true;
   if (laneFilter === 'JUNGLE' && (tags.includes('Fighter') || tags.includes('Assassin'))) return true;
@@ -70,9 +68,6 @@ function championMatchesLane(champion, laneFilter) {
   return false;
 }
 
-/**
- * Busca a versão atual do patch e todos os campeões na CDN oficial Riot Data Dragon
- */
 async function fetchDataDragonBootstrap() {
   const versionsRes = await fetch('https://ddragon.leagueoflegends.com/api/versions.json');
   const versions = await versionsRes.json();
@@ -86,9 +81,6 @@ async function fetchDataDragonBootstrap() {
   return { patch, champions, championList };
 }
 
-/**
- * Carrega o arquivo data/matchups.json
- */
 async function loadMatchupsDatabase() {
   if (MATCHUPS_DB) return MATCHUPS_DB;
   try {
@@ -97,12 +89,11 @@ async function loadMatchupsDatabase() {
     MATCHUPS_DB = await res.json();
     return MATCHUPS_DB;
   } catch (err) {
-    console.warn('Não foi possível carregar ./data/matchups.json via HTTP, usando fallback se disponível.', err);
     if (window.FALLBACK_MATCHUPS_DB) {
       MATCHUPS_DB = window.FALLBACK_MATCHUPS_DB;
       return MATCHUPS_DB;
     }
-    return { matchups: {} };
+    return { matchups: {}, championProfiles: {} };
   }
 }
 
@@ -115,100 +106,166 @@ function getItemIconUrl(patch, itemId) {
 }
 
 /**
- * Consulta estrita no JSON de confrontos.
- * Nunca gera números falsos aleatórios: retorna `null` caso o confronto ou filtro não exista.
+ * Inverte simetricamente as estatísticas de (B vs A) para exibir (A vs B):
+ * - Win Rate: 100 - winRate
+ * - Deltas (@15 e Delta WR): sinal invertido (+ vira -, - vira +)
+ * - Dificuldade espelhada
  */
-async function getMatchupAnalysis({ ally, enemy, role, elo, junglerActive, enemyJungler }) {
-  if (!ally || !enemy || !role || !elo) return null;
+function invertStatsSymmetrically(origStats) {
+  const invertedWr = Number((100 - origStats.winRate).toFixed(1));
+  const invertedEnemyWr = Number((100 - invertedWr).toFixed(1));
+  const invertedDeltaWr = Number((-origStats.deltaWr).toFixed(1));
 
-  const db = await loadMatchupsDatabase();
-  const key = `${role}:${ally.id}:${enemy.id}`;
-  const record = db?.matchups?.[key];
+  const origDur = origStats.wrByDuration || { '0_25': 50, '25_35': 50, '35_plus': 50 };
+  const origLane = origStats.lane15 || {};
 
-  if (!record) {
-    return null;
-  }
-
-  const eloStats = record.baseStatsByElo?.[elo];
-  if (!eloStats) {
-    return null;
-  }
-
-  // Clona os dados para não mutar o cache quando o modo +Jungler estiver ativo
-  const stats = JSON.parse(JSON.stringify(eloStats));
-  const buildsAndRunes = JSON.parse(JSON.stringify(record.buildsAndRunes));
-  const aiCards = JSON.parse(JSON.stringify(record.aiCoach.cards));
-  let difficulty = record.difficulty || 'Equilibrado';
-
-  // Aplica modificadores reais de 2v2 caso o toggle "+ Jungler Inimigo" esteja ativo e um Jungler selecionado
-  if (junglerActive && enemyJungler) {
-    const overrides = record.aiCoach?.junglerOverrides || {};
-    const jgOverride = overrides[enemyJungler.id] || overrides.DEFAULT;
-
-    if (jgOverride) {
-      const wrDelta = Number(jgOverride.winRateDelta || 0);
-      stats.winRate = Number(Math.min(65, Math.max(35, stats.winRate + wrDelta)).toFixed(1));
-      stats.enemyWinRate = Number((100 - stats.winRate).toFixed(1));
-      stats.deltaWr = Number((stats.deltaWr + wrDelta).toFixed(1));
-
-      // Atualiza o Card 04 (Dinâmica de Selva & Risco de Gank)
-      const card04 = aiCards.find(c => c.step === '04');
-      if (card04) {
-        card04.subtitle = overrides[enemyJungler.id]
-          ? jgOverride.subtitle
-          : `Ameaça 2v2: ${enemy.name} + ${enemyJungler.name}`;
-        card04.accent = 'red';
-        card04.bullets = jgOverride.bullets.map(b =>
-          b.replace(/Jungler inimigo|Jungler adversário/gi, enemyJungler.name)
-        );
-      }
-    }
+  // Ajusta o tempo médio da 1ª torre de forma espelhada em torno de 14:45 (885s)
+  let invertedTowerTime = '14:45';
+  if (typeof origLane.firstTowerTime === 'string' && origLane.firstTowerTime.includes(':')) {
+    const [m, s] = origLane.firstTowerTime.split(':').map(Number);
+    const totalSec = m * 60 + s;
+    const mirroredSec = Math.max(780, Math.min(980, 1770 - totalSec));
+    invertedTowerTime = `${Math.floor(mirroredSec / 60)}:${String(mirroredSec % 60).padStart(2, '0')}`;
   }
 
   return {
-    allyId: record.allyId,
-    enemyId: record.enemyId,
-    role: record.role,
-    elo,
-    difficulty,
-    stats,
-    buildsAndRunes,
-    aiCards
+    winRate: invertedWr,
+    enemyWinRate: invertedEnemyWr,
+    deltaWr: invertedDeltaWr,
+    gamesAnalyzed: origStats.gamesAnalyzed,
+    pickRate: origStats.pickRate,
+    banRate: origStats.banRate,
+    presenceRate: origStats.presenceRate,
+    wrByDuration: {
+      '0_25': Number((100 - origDur['0_25']).toFixed(1)),
+      '25_35': Number((100 - origDur['25_35']).toFixed(1)),
+      '35_plus': Number((100 - origDur['35_plus']).toFixed(1))
+    },
+    lane15: {
+      goldDiff15: -(origLane.goldDiff15 || 0),
+      xpDiff15: -(origLane.xpDiff15 || 0),
+      csDiff15: Number((-(origLane.csDiff15 || 0)).toFixed(1)),
+      laneKillRate: Number((100 - (origLane.laneKillRate || 50)).toFixed(1)),
+      firstBloodPct: Number(Math.max(8.0, (40.0 - (origLane.firstBloodPct || 20))).toFixed(1)),
+      soloKillsAvg: Number(Math.max(0.25, (1.65 - (origLane.soloKillsAvg || 0.8))).toFixed(2)),
+      platesBefore14: Number(Math.max(0.5, (3.1 - (origLane.platesBefore14 || 1.5))).toFixed(1)),
+      firstTowerTime: invertedTowerTime
+    }
   };
 }
 
-/**
- * Retorna a lista de confrontos disponíveis no JSON para facilitar a verificação
- */
-async function getAvailableMatchupKeys() {
-  const db = await loadMatchupsDatabase();
-  return Object.keys(db?.matchups || {});
+function invertDifficulty(difficulty) {
+  const map = {
+    'Fácil': 'Counter',
+    'Counter': 'Fácil',
+    'Favorável': 'Difícil',
+    'Difícil': 'Favorável',
+    'Equilibrado': 'Equilibrado'
+  };
+  return map[difficulty] || 'Equilibrado';
 }
 
 /**
- * Retorna em quais rotas (TOP, JUNGLE, MID, ADC, SUPPORT) já existem dados para o par selecionado
+ * Monta os 5 Cards Escaneáveis do Coach de IA adaptados ao campeão aliado e oponente
+ */
+function buildDynamicAICoachCards(ally, enemy, stats, buildsAndRunes) {
+  const favored = stats.winRate >= 50;
+  const counterName = buildsAndRunes?.counterItem?.name || 'item defensivo';
+
+  return [
+    {
+      step: '01',
+      title: 'Nível 1–3 & Wave',
+      subtitle: favored ? 'Pressão & Prioridade de Rota' : 'Controle Defensivo de Wave',
+      icon: 'waves',
+      accent: 'cyan',
+      bullets: [
+        favored
+          ? `Dispute os 3 primeiros minions melee com ${ally.name} para garantir Nível 2 antes de ${enemy.name}.`
+          : `Respeite o Nível 1–2 de ${enemy.name}; deixe a wave puxar para perto da sua torre e farme em segurança.`,
+        `Evite gastar sua habilidade principal na wave se ${enemy.name} estiver posicionado para punir seu tempo de recarga.`,
+        `Faça crash na 3ª wave (catapulta) para conquistar visão no rio ou um recall sem perder XP.`
+      ]
+    },
+    {
+      step: '02',
+      title: 'Power Spikes',
+      subtitle: 'Nível 6 & 1º Item',
+      icon: 'zap',
+      accent: 'gold',
+      bullets: [
+        `No Nível 6, a Ultimate de ${enemy.name} eleva o risco de abate: não aceite trocas longas abaixo de 65% de vida.`,
+        `Seu pico principal ocorre ao fechar ${buildsAndRunes?.coreItems?.[0]?.name || 'o 1º item'} + ${buildsAndRunes?.boots?.name || 'botas'}.`,
+        favored
+          ? `Use a vantagem de item para forçar lutas no rio e cobrar barricadas antes dos 14 minutos.`
+          : `Priorize fechar ${counterName} cedo para neutralizar o all-in de ${enemy.name}.`
+      ]
+    },
+    {
+      step: '03',
+      title: 'Janelas de Troca',
+      subtitle: 'Cooldowns & Punição',
+      icon: 'timer',
+      accent: 'cyan',
+      bullets: [
+        `Janela crítica: avance imediatamente quando ${enemy.name} gastar sua habilidade de controle ou mobilidade para farmar.`,
+        `Prefira trocas ${ally.tags?.includes('Mage') || ally.tags?.includes('Assassin') ? 'curtas e explosivas (poke + recuo)' : 'prolongadas empilhando sua runa principal'} contra ${enemy.name}.`,
+        `Use os arbustos da rota para quebrar a linha de visão e resetar o foco dos minions.`
+      ]
+    },
+    {
+      step: '04',
+      title: 'Selva & Ganks',
+      subtitle: 'Controle de Visão 1v1',
+      icon: 'compass',
+      accent: 'gold',
+      bullets: [
+        `Posicione uma Sentinela de Controle após o primeiro recall para proteger seu flanco e destravar pressão.`,
+        `Rastreie o início do Jungler inimigo aos 1:30 para jogar do lado seguro da rota no timming de 3:15.`,
+        `Se ${enemy.name} congelar a wave perto da torre dele, chame seu Jungler para ajudar a quebrar o freeze.`
+      ]
+    },
+    {
+      step: '05',
+      title: 'Condição de Vitória',
+      subtitle: 'Win Con & Erro Fatal',
+      icon: 'trophy',
+      accent: 'emerald',
+      bullets: [
+        `WIN CON: ${favored ? `Converter a vantagem de rota (${stats.lane15.goldDiff15 >= 0 ? '+' : ''}${stats.lane15.goldDiff15}g @15) em objetivos e rotação.` : `Sobreviver à fase de rotas sem ceder abates solo e superar ${enemy.name} nas lutas 5v5.`}`,
+        `ERRO FATAL: Lutar dentro de uma wave acumulada de ${enemy.name} nos níveis 3 a 5 sem visão do rio.`
+      ]
+    }
+  ];
+}
+
+/**
+ * Retorna em quais rotas já existem dados cadastrados para o par (em qualquer direção A vs B ou B vs A)
  */
 async function getAvailableRolesForPair(allyId, enemyId) {
   if (!allyId || !enemyId) return [];
   const db = await loadMatchupsDatabase();
   const matchups = db?.matchups || {};
-  const roles = [];
+  const roles = new Set();
+
   for (const key of Object.keys(matchups)) {
-    const [r, a, e] = key.split(':');
-    if (a === allyId && e === enemyId) {
-      roles.push(r);
+    const [r, a, b] = key.split(':');
+    if ((a === allyId && b === enemyId) || (a === enemyId && b === allyId)) {
+      roles.add(r);
     }
   }
-  return roles;
+  return Array.from(roles);
 }
 
 window.RiftServices = {
+  MIN_ELO_SAMPLE_SIZE,
   fetchDataDragonBootstrap,
   loadMatchupsDatabase,
   championMatchesLane,
   getChampionIconUrl,
   getItemIconUrl,
-  getMatchupAnalysis,
-  getAvailableMatchupKeys,
+  invertStatsSymmetrically,
+  invertDifficulty,
+  buildDynamicAICoachCards,
   getAvailableRolesForPair
 };

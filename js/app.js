@@ -2,9 +2,9 @@
  * ============================================================================
  * RIFTCOACH.GG - CONTROLADOR PRINCIPAL DA APLICAÇÃO (app.js)
  * Suporta:
- * 1. Inversão Simétrica Automática (A vs B calculado a partir de B vs A)
- * 2. Fallback por Elo para GLOBAL com aviso discreto na interface
- * 3. Base completa de campeões do League of Legends (data/matchups.json)
+ * 1. Inversão Automática de Confronto (winRateA = 100 - winRateB, sinais +/- de GD@15, XPD@15 e CSD@15)
+ * 2. Fallback Inteligente de Elo (para GLOBAL com aviso sutil abaixo do header)
+ * 3. Dinâmica de Jungler Inimigo (ajuste de Risco de Gank e Card 4 do Coach de IA)
  * ============================================================================
  */
 
@@ -14,8 +14,8 @@ const STATE = {
   championList: [],
   role: 'TOP',
   elo: 'EMERALD_PLUS',
-  ally: null,          // Começa vazio na primeira visita
-  enemy: null,         // Começa vazio na primeira visita
+  ally: null,          // Estado inicial vazio (null)
+  enemy: null,         // Estado inicial vazio (null)
   junglerActive: false,
   enemyJungler: null,
   modalTarget: 'ally', // 'ally' | 'enemy' | 'jungler'
@@ -48,7 +48,7 @@ const ROLE_LABELS = {
 
 /**
  * ============================================================================
- * LEITURA DE ESTATÍSTICAS COM INVERSÃO SIMÉTRICA & FALLBACK POR ELO
+ * LEITURA ULTRARRÁPIDA COM INVERSÃO SIMÉTRICA, FALLBACK DE ELO E JUNGLER 2v2
  * ============================================================================
  */
 async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, enemyJungler }) {
@@ -60,6 +60,7 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
     hydrateCompactPairRecord,
     invertStatsSymmetrically,
     invertDifficulty,
+    evaluateJunglerThreat,
     buildDynamicAICoachCards
   } = window.RiftServices;
 
@@ -74,13 +75,13 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
   let rawRecord = matchupsMap[directKey];
   let isSymmetricInversion = false;
 
-  // 1. Inversão Simétrica Automática em confrontos detalhados (B vs A -> A vs B)
+  // 1. Inversão Automática de Confronto (se salvo como B vs A, inverte para A vs B)
   if (!rawRecord && matchupsMap[reverseKey]) {
     rawRecord = matchupsMap[reverseKey];
     isSymmetricInversion = true;
   }
 
-  // 1b. Consulta na matriz compacta universal (compactPairs) gerada pelo coletor_riot.py
+  // 1b. Consulta em O(1) na matriz compacta de 148.780 combinações (compactPairs)
   if (!rawRecord) {
     const directPairKey = `${ally.id}:${enemy.id}`;
     const reversePairKey = `${enemy.id}:${ally.id}`;
@@ -97,7 +98,7 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
     return null;
   }
 
-  // 2. Fallback Automático por Elo: se o elo filtrado não tiver amostra suficiente, usa GLOBAL
+  // 2. Fallback Inteligente de Elo: se o Elo filtrado não tiver amostra suficiente, usa GLOBAL
   const eloDict = rawRecord.baseStatsByElo || {};
   let selectedEloStats = eloDict[elo];
   let isEloFallback = false;
@@ -114,8 +115,12 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
     return null;
   }
 
-  // Clona estatísticas e aplica inversão simétrica caso o registro venha de (B vs A)
-  let stats = JSON.parse(JSON.stringify(selectedEloStats));
+  // Copia rápida das estatísticas do Elo e aplica inversão simétrica se necessário
+  let stats = {
+    ...selectedEloStats,
+    wrByDuration: { ...selectedEloStats.wrByDuration },
+    lane15: { ...selectedEloStats.lane15 }
+  };
   let difficulty = rawRecord.difficulty || 'Equilibrado';
 
   if (isSymmetricInversion) {
@@ -123,49 +128,46 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
     difficulty = invertDifficulty(difficulty);
   }
 
-  // Resolve Builds & Runas do campeão Aliado (do registro direto ou do catálogo de campeões)
+  // Resolve Builds & Runas do campeão Aliado
   let buildsAndRunes = null;
   if (!isSymmetricInversion && rawRecord.buildsAndRunes) {
-    buildsAndRunes = JSON.parse(JSON.stringify(rawRecord.buildsAndRunes));
+    buildsAndRunes = rawRecord.buildsAndRunes;
   } else if (profilesMap[ally.id]) {
-    buildsAndRunes = JSON.parse(JSON.stringify(profilesMap[ally.id]));
-    // Personaliza a explicação do item de counter contra o oponente atual
-    if (buildsAndRunes.counterItem) {
-      buildsAndRunes.counterItem.reason = `${buildsAndRunes.counterItem.reason.replace(/\.$/, '')} contra ${enemy.name}.`;
-    }
+    const baseProfile = profilesMap[ally.id];
+    buildsAndRunes = {
+      ...baseProfile,
+      counterItem: {
+        ...baseProfile.counterItem,
+        reason: `${baseProfile.counterItem.reason.replace(/\.$/, '')} contra ${enemy.name}.`
+      }
+    };
   }
 
   // Resolve os 5 Cards do Coach de IA
-  let aiCards = null;
-  if (!isSymmetricInversion && rawRecord.aiCoach?.cards) {
-    aiCards = JSON.parse(JSON.stringify(rawRecord.aiCoach.cards));
-  } else {
-    aiCards = buildDynamicAICoachCards(ally, enemy, stats, buildsAndRunes);
-  }
+  let aiCards = (!isSymmetricInversion && rawRecord.aiCoach?.cards)
+    ? rawRecord.aiCoach.cards.map(c => ({ ...c, bullets: [...c.bullets] }))
+    : buildDynamicAICoachCards(ally, enemy, stats, buildsAndRunes);
 
-  // 3. Modificador Modo 2v2 (+ Jungler Inimigo)
+  // 3. Dinâmica de Jungler Inimigo (Modo 2v2 e Risco de Gank por Arquétipo)
+  let junglerThreat = null;
   if (junglerActive && enemyJungler) {
-    const overrides = (!isSymmetricInversion && rawRecord.aiCoach?.junglerOverrides) || {};
-    const jgOverride = overrides[enemyJungler.id] || overrides.DEFAULT;
+    junglerThreat = evaluateJunglerThreat(enemyJungler, ally, enemy, db);
 
-    const wrDelta = jgOverride ? Number(jgOverride.winRateDelta || -1.4) : -1.4;
+    // Se houver override específico cadastrado no JSON curado, prioriza as dicas específicas
+    const customOverride = (!isSymmetricInversion && rawRecord.aiCoach?.junglerOverrides?.[enemyJungler.id]) || null;
+    const wrDelta = customOverride ? Number(customOverride.winRateDelta) : junglerThreat.winRateDelta;
+
     stats.winRate = Number(Math.min(65, Math.max(35, stats.winRate + wrDelta)).toFixed(1));
     stats.enemyWinRate = Number((100 - stats.winRate).toFixed(1));
     stats.deltaWr = Number((stats.deltaWr + wrDelta).toFixed(1));
+    stats.lane15.goldDiff15 = Math.round(stats.lane15.goldDiff15 + junglerThreat.gd15Delta);
 
     const card04 = aiCards.find(c => c.step === '04');
     if (card04) {
-      card04.subtitle = jgOverride && overrides[enemyJungler.id]
-        ? jgOverride.subtitle
-        : `Ameaça 2v2: ${enemy.name} + ${enemyJungler.name}`;
+      card04.title = 'Dinâmica de Selva & Risco de Gank';
+      card04.subtitle = customOverride ? customOverride.subtitle : junglerThreat.subtitle;
       card04.accent = 'red';
-      card04.bullets = jgOverride
-        ? jgOverride.bullets.map(b => b.replace(/Jungler inimigo|Jungler adversário/gi, enemyJungler.name))
-        : [
-            `ALERTA 2v2: ${enemy.name} + ${enemyJungler.name} possuem forte pressão de gank e controle de grupo antes dos 6 min.`,
-            `Posicione visão profunda no rio aos 2:45 para rastrear a primeira rotação de ${enemyJungler.name}.`,
-            `Guarde sua habilidade de mobilidade/escape exclusivamente caso ${enemyJungler.name} esteja fora do minimapa.`
-          ];
+      card04.bullets = customOverride ? customOverride.bullets : junglerThreat.bullets;
     }
   }
 
@@ -176,6 +178,7 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
     elo,
     isEloFallback,
     isSymmetricInversion,
+    junglerThreat,
     difficulty,
     stats,
     buildsAndRunes,
@@ -185,11 +188,15 @@ async function resolveMatchupAnalysis({ ally, enemy, role, elo, junglerActive, e
 
 async function initApp() {
   try {
-    await window.RiftServices.loadMatchupsDatabase();
-    const { patch, champions, championList } = await window.RiftServices.fetchDataDragonBootstrap();
-    STATE.patch = patch;
-    STATE.champions = champions;
-    STATE.championList = championList;
+    // Carrega Data Dragon e banco de matchups em paralelo para velocidade máxima
+    const [ddData] = await Promise.all([
+      window.RiftServices.fetchDataDragonBootstrap(),
+      window.RiftServices.loadMatchupsDatabase()
+    ]);
+
+    STATE.patch = ddData.patch;
+    STATE.champions = ddData.champions;
+    STATE.championList = ddData.championList;
 
     document.getElementById('patchBadge').textContent = STATE.patch;
     await refreshDashboard();
@@ -218,33 +225,12 @@ async function refreshDashboard() {
 
   emptyView.classList.add('hidden');
 
-  // 2. Consulta estatísticas (com suporte a Inversão Simétrica e Fallback por Elo)
+  // 2. Consulta estatísticas (com Inversão Automática, Fallback por Elo e Jungler 2v2)
   const analysis = await resolveMatchupAnalysis(STATE);
 
   if (!analysis) {
     insufficientView.classList.remove('hidden');
     analysisView.classList.add('hidden');
-
-    const altHint = document.getElementById('alternateRoleHint');
-    const availableRoles = await window.RiftServices.getAvailableRolesForPair(STATE.ally.id, STATE.enemy.id);
-    if (altHint && availableRoles.length > 0) {
-      altHint.classList.remove('hidden');
-      altHint.innerHTML = availableRoles.map(r => `
-        <button type="button" data-switch-role="${r}" class="switch-role-hint-btn inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-hextech-cyan/20 hover:bg-hextech-cyan/30 border border-hextech-cyan/50 text-xs font-semibold text-hextech-cyan transition">
-          <span>Confronto disponível na rota <strong>${ROLE_LABELS[r]}</strong> — Alternar para ${ROLE_LABELS[r]}</span>
-        </button>
-      `).join(' ');
-      altHint.querySelectorAll('.switch-role-hint-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          setRoleUI(btn.dataset.switchRole);
-          refreshDashboard();
-        });
-      });
-    } else if (altHint) {
-      altHint.classList.add('hidden');
-      altHint.innerHTML = '';
-    }
-
     if (window.lucide) window.lucide.createIcons();
     return;
   }
@@ -329,7 +315,7 @@ function updateTopSelectorCards() {
 
 function renderSummaryHeader(analysis) {
   const { getChampionIconUrl } = window.RiftServices;
-  const { stats, isEloFallback } = analysis;
+  const { stats, isEloFallback, junglerThreat } = analysis;
 
   document.getElementById('summaryAllyImg').src = getChampionIconUrl(STATE.patch, STATE.ally.id);
   document.getElementById('summaryAllyName').textContent = STATE.ally.name;
@@ -345,19 +331,29 @@ function renderSummaryHeader(analysis) {
   document.getElementById('allyWinBar').style.width = `${stats.winRate}%`;
   document.getElementById('enemyWinBar').style.width = `${stats.enemyWinRate}%`;
 
-  const modeLabel = document.getElementById('summaryModeLabel');
-  if (STATE.junglerActive && STATE.enemyJungler) {
-    modeLabel.textContent = `Cenário 2v2: vs ${STATE.enemy.name} + ${STATE.enemyJungler.name} (JG)`;
-    modeLabel.className = 'text-[11px] text-amber-400 font-semibold mt-0.5';
-  } else {
-    modeLabel.textContent = 'Confronto 1v1 na Rota';
-    modeLabel.className = 'text-[11px] text-slate-400 mt-0.5';
-  }
-
-  // Exibe ou oculta o aviso discreto de Fallback por Elo
+  // Aviso Sutil Abaixo do Header para Fallback de Elo
   const fallbackNotice = document.getElementById('eloFallbackNotice');
   if (fallbackNotice) {
     fallbackNotice.classList.toggle('hidden', !isEloFallback);
+  }
+
+  // Modo 1v1 vs 2v2 e Indicador de Risco de Gank
+  const modeLabel = document.getElementById('summaryModeLabel');
+  const gankBadge = document.getElementById('gankRiskBadge');
+
+  if (STATE.junglerActive && STATE.enemyJungler && junglerThreat) {
+    modeLabel.textContent = `Cenário 2v2: vs ${STATE.enemy.name} + ${STATE.enemyJungler.name} (${junglerThreat.archetypeLabel})`;
+    modeLabel.className = 'text-[11px] text-amber-300 font-semibold mt-0.5';
+    if (gankBadge) {
+      gankBadge.textContent = `Risco de Gank: ${junglerThreat.riskLevel}`;
+      gankBadge.className = `mt-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${junglerThreat.riskBadgeClass}`;
+    }
+  } else {
+    modeLabel.textContent = 'Confronto 1v1 na Rota';
+    modeLabel.className = 'text-[11px] text-slate-400 mt-0.5';
+    if (gankBadge) {
+      gankBadge.classList.add('hidden');
+    }
   }
 
   const badge = document.getElementById('matchupDifficultyBadge');
@@ -430,10 +426,7 @@ function renderTabOverview(analysis) {
           <i data-lucide="activity" class="w-5 h-5 text-hextech-cyan"></i>
           <h3 class="font-display font-bold text-lg text-white uppercase tracking-wide">Desempenho Geral no Confronto</h3>
         </div>
-        <div class="flex items-center gap-2">
-          ${isEloFallback ? `<span class="text-[11px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">Exibindo dados Globais (amostra baixa no elo selecionado)</span>` : ''}
-          <span class="text-xs text-slate-400">${ROLE_LABELS[STATE.role]} • ${isEloFallback ? 'Global' : ELO_LABELS[STATE.elo]}</span>
-        </div>
+        <span class="text-xs text-slate-400">${ROLE_LABELS[STATE.role]} • ${isEloFallback ? 'Global' : ELO_LABELS[STATE.elo]}</span>
       </div>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
@@ -800,8 +793,8 @@ function renderTabBuilds(analysis) {
  */
 function renderTabAICoach(analysis) {
   const modeBadge = document.getElementById('aiModeBadge');
-  if (STATE.junglerActive && STATE.enemyJungler) {
-    modeBadge.textContent = `Modo 2v2 Ativo (vs ${STATE.enemyJungler.name} JG)`;
+  if (STATE.junglerActive && STATE.enemyJungler && analysis.junglerThreat) {
+    modeBadge.textContent = `Modo 2v2: vs ${STATE.enemyJungler.name} (${analysis.junglerThreat.riskLevel})`;
     modeBadge.className = 'text-[11px] font-sans font-semibold px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40';
   } else {
     modeBadge.textContent = 'Modo 1v1 Isolado';

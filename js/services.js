@@ -1,16 +1,15 @@
 /**
  * ============================================================================
  * RIFTCOACH.GG - SERVIÇOS DE DADOS (Riot Data Dragon + data/matchups.json)
- * Suporta:
- * 1. Leitura de confrontos curados (`matchups`) e da matriz universal compacta
- *    (`compactPairs`) gerada por `scripts/coletor_riot.py` para todas as 148.780
- *    combinações direcionais (173 campeões x 172 oponentes x 5 rotas).
- * 2. Inversão Simétrica Automática (A vs B calculado a partir de B vs A).
- * 3. Fallback Automático por Elo para GLOBAL com aviso discreto na UI.
+ * Otimizado para leitura O(1) de alta velocidade:
+ * 1. Inversão Automática de Confronto (winRateA = 100 - winRateB, sinais invertidos)
+ * 2. Fallback Inteligente de Elo (para GLOBAL quando amostra é baixa)
+ * 3. Análise de Arquétipo do Jungler Inimigo (2v2 e Risco de Gank)
  * ============================================================================
  */
 
 let MATCHUPS_DB = null;
+let MATCHUPS_LOADING_PROMISE = null;
 const MIN_ELO_SAMPLE_SIZE = 100;
 
 const UI_ROLE_TO_RIOT_ROUTE = {
@@ -24,9 +23,6 @@ const UI_ROLE_TO_RIOT_ROUTE = {
   UTILITY: 'UTILITY'
 };
 
-/**
- * Mapeamento de Campeões por Rota para o filtro de ícones do Modal
- */
 const CHAMPION_LANES = {
   TOP: [
     'Aatrox', 'Akali', 'Ambessa', 'Aurora', 'Camille', 'ChoGath', 'Darius', 'DrMundo', 'Fiora',
@@ -67,6 +63,14 @@ const CHAMPION_LANES = {
   ]
 };
 
+const EARLY_GANK_JUNGLERS = new Set([
+  'LeeSin', 'JarvanIV', 'Elise', 'XinZhao', 'RekSai', 'Shaco', 'Nunu', 'Pantheon', 'Rammus', 'Poppy', 'Warwick'
+]);
+
+const LEVEL6_BURST_JUNGLERS = new Set([
+  'Diana', 'Nocturne', 'Evelynn', 'Fiddlesticks', 'Karthus', 'Shyvana', 'Vi', 'Ekko', 'Lillia', 'Brand', 'Zyra', 'Taliyah'
+]);
+
 function championMatchesLane(champion, laneFilter) {
   if (!laneFilter || laneFilter === 'ALL') return true;
   const list = CHAMPION_LANES[laneFilter] || [];
@@ -95,20 +99,31 @@ async function fetchDataDragonBootstrap() {
   return { patch, champions, championList };
 }
 
+/**
+ * Carrega e mantém em cache na memória o arquivo data/matchups.json
+ */
 async function loadMatchupsDatabase() {
   if (MATCHUPS_DB) return MATCHUPS_DB;
-  try {
-    const res = await fetch('./data/matchups.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    MATCHUPS_DB = await res.json();
-    return MATCHUPS_DB;
-  } catch (err) {
-    if (window.FALLBACK_MATCHUPS_DB) {
-      MATCHUPS_DB = window.FALLBACK_MATCHUPS_DB;
+  if (MATCHUPS_LOADING_PROMISE) return MATCHUPS_LOADING_PROMISE;
+
+  MATCHUPS_LOADING_PROMISE = (async () => {
+    try {
+      const res = await fetch('./data/matchups.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      MATCHUPS_DB = await res.json();
       return MATCHUPS_DB;
+    } catch (err) {
+      if (window.FALLBACK_MATCHUPS_DB) {
+        MATCHUPS_DB = window.FALLBACK_MATCHUPS_DB;
+        return MATCHUPS_DB;
+      }
+      return { matchups: {}, championProfiles: {}, compactPairs: {} };
+    } finally {
+      MATCHUPS_LOADING_PROMISE = null;
     }
-    return { matchups: {}, championProfiles: {}, compactPairs: {} };
-  }
+  })();
+
+  return MATCHUPS_LOADING_PROMISE;
 }
 
 function getChampionIconUrl(patch, champId) {
@@ -120,8 +135,7 @@ function getItemIconUrl(patch, itemId) {
 }
 
 /**
- * Decodifica uma tupla compacta [wr, dwr, games, pr, br, gd15, xpd15, csd15, lkr, fb, sk, plates]
- * aplicando o modificador de afinidade da rota selecionada (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`)
+ * Hidrata uma tupla compacta [wr, dwr, games, pr, br, gd15, xpd15, csd15, lkr, fb, sk, plates]
  */
 function hydrateCompactPairRecord(tuple, role, champAId, champBId, db) {
   const riotRoute = UI_ROLE_TO_RIOT_ROUTE[role] || 'TOP';
@@ -210,11 +224,12 @@ function hydrateCompactPairRecord(tuple, role, champAId, champBId, db) {
 }
 
 /**
- * Inverte simetricamente as estatísticas de (B vs A) para exibir (A vs B)
+ * Inversão Simétrica Automática:
+ * winRateA = 100 - winRateB e inversão de sinais (+/-) de GD@15, XPD@15 e CSD@15
  */
 function invertStatsSymmetrically(origStats) {
-  const invertedWr = Number((100 - origStats.winRate).toFixed(1));
-  const invertedEnemyWr = Number((100 - invertedWr).toFixed(1));
+  const winRateA = Number((100 - origStats.winRate).toFixed(1));
+  const enemyWinRateB = Number((100 - winRateA).toFixed(1));
   const invertedDeltaWr = Number((-origStats.deltaWr).toFixed(1));
 
   const origDur = origStats.wrByDuration || { '0_25': 50, '25_35': 50, '35_plus': 50 };
@@ -229,8 +244,8 @@ function invertStatsSymmetrically(origStats) {
   }
 
   return {
-    winRate: invertedWr,
-    enemyWinRate: invertedEnemyWr,
+    winRate: winRateA,
+    enemyWinRate: enemyWinRateB,
     deltaWr: invertedDeltaWr,
     gamesAnalyzed: origStats.gamesAnalyzed,
     pickRate: origStats.pickRate,
@@ -263,6 +278,83 @@ function invertDifficulty(difficulty) {
     'Equilibrado': 'Equilibrado'
   };
   return map[difficulty] || 'Equilibrado';
+}
+
+/**
+ * Avalia o risco de gank e a dinâmica de selva (2v2) com base no arquétipo
+ * e nas tags do Jungler inimigo selecionado.
+ */
+function evaluateJunglerThreat(enemyJungler, ally, enemy, db) {
+  const jgId = enemyJungler.id;
+  const jgName = enemyJungler.name;
+  const jgProfile = db?.championProfiles?.[jgId] || {};
+  const jgTags = enemyJungler.tags || jgProfile.tags || [];
+
+  // 1. Early Ganker / Pressão Nível 2–3
+  if (EARLY_GANK_JUNGLERS.has(jgId)) {
+    return {
+      archetypeLabel: 'Early Ganker (Pressão Nv. 2–3)',
+      riskLevel: 'Extremo (Níveis 2–4)',
+      riskBadgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+      winRateDelta: -1.8,
+      gd15Delta: -95,
+      subtitle: `Risco Extremo Nv. 2–3: ${enemy.name} + ${jgName}`,
+      bullets: [
+        `ALERTA DE EARLY GANK: ${jgName} possui alta pressão entre 2:35 e 3:15 logo após o 3º campo. Warde o rio/Acuâminas aos 2:25.`,
+        `Não avance além do meio da rota sem seu Flash ou habilidade de escape pronta contra ${enemy.name} + ${jgName}.`,
+        `Se você sobreviver aos primeiros 6 minutos sem entregar abates para ${jgName}, a pressão dele cai drasticamente.`
+      ]
+    };
+  }
+
+  // 2. Tank / Iniciador de Controle de Grupo
+  if (jgTags.includes('Tank') || jgProfile.archetype === 'TANK') {
+    return {
+      archetypeLabel: 'Iniciador de Controle de Grupo (Tank)',
+      riskLevel: 'Alto (Setup de CC & Dive)',
+      riskBadgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      winRateDelta: -1.5,
+      gd15Delta: -75,
+      subtitle: `Cadeia de CC 2v2: ${enemy.name} + ${jgName}`,
+      bullets: [
+        `CADEIA DE CC: ${jgName} absorve dano da torre facilmente e trava você no lugar para o dano de ${enemy.name}.`,
+        `Considere Tenacidade (runa Inabalável ou Passos de Mercúrio) para sair rápido do controle de grupo de ${jgName}.`,
+        `Evite ficar na rota abaixo de 45% de vida quando uma wave grande estiver batendo na sua torre (risco alto de dive).`
+      ]
+    };
+  }
+
+  // 3. Power Spiker de Nível 6 / Explosão Mágica ou Global
+  if (LEVEL6_BURST_JUNGLERS.has(jgId) || jgTags.includes('Mage')) {
+    return {
+      archetypeLabel: 'Power Spike Nível 6 & Burst',
+      riskLevel: 'Alto após Nível 6',
+      riskBadgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+      winRateDelta: -1.6,
+      gd15Delta: -65,
+      subtitle: `Pico Letal Nv. 6: ${enemy.name} + ${jgName}`,
+      bullets: [
+        `JANELA LIVRE NV. 1–5: ${jgName} prioriza limpar a selva toda até o Nível 6; aproveite os primeiros 5 minutos para pressionar ${enemy.name}.`,
+        `PERIGO AOS 6 MIN: Quando ${jgName} atingir o Nível 6, a ultimate dele combinada com ${enemy.name} garante abate mesmo debaixo da torre.`,
+        `Coloque Sentinelas de Controle profundas nas entradas da selva inimiga para antecipar a aproximação de ${jgName}.`
+      ]
+    };
+  }
+
+  // 4. Assassino / Duelista de Skirmish 2v2
+  return {
+    archetypeLabel: 'Assassino / Duelista 2v2',
+    riskLevel: 'Alto em Trocas no Rio',
+    riskBadgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+    winRateDelta: -1.4,
+    gd15Delta: -70,
+    subtitle: `Ameaça de Skirmish 2v2: ${enemy.name} + ${jgName}`,
+    bullets: [
+      `DUELO 2v2 PERIGOSO: ${jgName} busca abates em lutas no rio e punição de campeões sem recursos de vida/mana.`,
+      `Nunca faça trocas 1v1 deixando sua vida abaixo de 40% sem saber a posição exata de ${jgName} no minimapa.`,
+      `Recue imediatamente após cobrar uma barricada — ${jgName} costuma punir jogadores que permanecem além do tempo na rota.`
+    ]
+  };
 }
 
 function buildDynamicAICoachCards(ally, enemy, stats, buildsAndRunes) {
@@ -365,6 +457,7 @@ window.RiftServices = {
   hydrateCompactPairRecord,
   invertStatsSymmetrically,
   invertDifficulty,
+  evaluateJunglerThreat,
   buildDynamicAICoachCards,
   getAvailableRolesForPair
 };

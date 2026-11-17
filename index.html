@@ -279,7 +279,16 @@
     </section>
 
     <!-- ================= C. PAINEL DE RESULTADOS (HEADER RESUMO + 4 ABAS) ================= -->
-    <div id="analysisContentView" class="hidden space-y-6 animate-fadeIn">
+    <div id="analysisContentView" class="hidden space-y-5 animate-fadeIn">
+
+      <!-- Aviso Sutil Abaixo do Header: Fallback de Elo -->
+      <div id="eloFallbackNotice" class="hidden bg-amber-950/25 border border-amber-500/35 rounded-xl px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-300">
+        <div class="flex items-center gap-2">
+          <i data-lucide="info" class="w-4 h-4 text-amber-400 shrink-0"></i>
+          <span class="font-medium">Amostra baixa no elo selecionado — exibindo dados Globais</span>
+        </div>
+        <span id="eloFallbackBadge" class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30">Fallback: Global</span>
+      </div>
 
       <!-- HEADER RESUMO COMPACTO DO CONFRONTO -->
       <section class="bg-hextech-card border border-slate-800 rounded-xl p-4 sm:p-5 shadow-lg">
@@ -292,7 +301,7 @@
                 <span id="summaryAllyName" class="font-display font-bold text-lg text-white">Aliado</span>
                 <span id="allyWinRateLabel" class="font-display font-bold text-2xl text-hextech-cyan">50.0%</span>
               </div>
-              <div class="flex items-center gap-2 text-xs text-slate-400">
+              <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400">
                 <span id="summaryRoleEloText">MID • Esmeralda+</span>
                 <span id="matchupDifficultyBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                   Equilibrado
@@ -301,17 +310,16 @@
             </div>
           </div>
 
-          <!-- Centro: Total de Partidas + Modo 2v2 + Aviso de Fallback de Elo -->
+          <!-- Centro: Total de Partidas + Modo 2v2 / Risco de Gank -->
           <div class="flex flex-col items-start md:items-center text-xs text-slate-400">
             <span class="flex items-center gap-1.5">
               <i data-lucide="trophy" class="w-3.5 h-3.5 text-hextech-gold"></i>
               <strong id="sampleSizeText" class="text-slate-200">0</strong> partidas analisadas
             </span>
             <span id="summaryModeLabel" class="text-[11px] text-slate-500 mt-0.5">Confronto 1v1 na Rota</span>
-            <div id="eloFallbackNotice" class="hidden mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-300 font-medium">
-              <i data-lucide="info" class="w-3 h-3"></i>
-              <span>Exibindo dados Globais (amostra baixa no elo selecionado)</span>
-            </div>
+            <span id="gankRiskBadge" class="hidden mt-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/35">
+              Risco de Gank: Alto
+            </span>
           </div>
 
           <!-- Inimigo Resumo -->

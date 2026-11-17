@@ -646,4 +646,9 @@ if __name__ == "__main__":
     gerar_base_inicial()
     env_api_key = os.environ.get("RIOT_API_KEY", "").strip()
     if env_api_key:
-        coletar_partidas_reais(env_api_key)
+        try:
+            coletar_partidas_reais(env_api_key)
+        except Exception as exc:
+            print(f"[Aviso] Falha na coleta da Riot API ({exc}). Mantendo atualização do Data Dragon sem quebrar o build.")
+    else:
+        print("[Info] Secret RIOT_API_KEY não definida. Base atualizada via Riot Data Dragon.")
